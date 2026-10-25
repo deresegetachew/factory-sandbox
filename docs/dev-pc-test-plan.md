@@ -1,4 +1,4 @@
-# Factory test plan for a Claude session on dev-pc
+# Factory test plan for a Claude session on dev-pc (start from the alpha release)
 
 You are a Claude Code session on the owner's dev-pc. Run this plan against this repo (`deresegetachew/factory-sandbox`,
 a throwaway project with the software factory installed) and write down exactly what happens. The goal is to find out
@@ -9,7 +9,7 @@ each problem; the owner turns them into issues in `deresegetachew/my-skills`.
 - Never push to `main`, never force-push, never print or commit a secret, never edit anything under `.claude/`, `CLAUDE.md`.
 - Do not change the plan's steps to make them pass. If a step fails, record it, then carry on with the next step.
 - Record numbers as the tools print them. Do not estimate or invent any.
-- Work in a fresh clone: `git clone https://github.com/deresegetachew/factory-sandbox && cd factory-sandbox`.
+- Work in a fresh clone: `git clone https://github.com/deresegetachew/factory-sandbox && cd factory-sandbox && git checkout alpha-test`.
 
 ## What was already found on a cloud machine (do not re-report, but say whether dev-pc is different)
 1. A clone of an empty repo has no `origin/main`, so the loop crashed with a traceback. Check: `git branch -r` shows `origin/main`.
@@ -19,6 +19,27 @@ each problem; the owner turns them into issues in `deresegetachew/my-skills`.
    permission setup on dev-pc let the loop edit files and run `python3 tests/test_textkit.py` without a prompt?
 4. The reviewer subagent could not run Bash, and the PR gate hook errored on `gh` (no GraphQL in that cloud box).
    Check: do both work on dev-pc?
+
+## Step A: install the factory from the alpha release (this branch has no factory in it)
+This branch, `alpha-test`, is the sandbox project without the factory. Install `v0.1.0-alpha.1` of my-skills the way a
+project would. If the release does not exist yet (`gh release view v0.1.0-alpha.1 -R deresegetachew/my-skills` fails),
+stop and tell the owner: the tag `v0.1.0-alpha.1` on my-skills has not been pushed.
+```
+git clone https://github.com/deresegetachew/factory-sandbox && cd factory-sandbox && git checkout alpha-test
+git config --add remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*' && git fetch origin
+mkdir -p /tmp/alpha && cd /tmp/alpha
+gh release download v0.1.0-alpha.1 -R deresegetachew/my-skills -p 'software-factory-*.tar.gz' -p SHA256SUMS
+sha256sum -c SHA256SUMS && tar xzf software-factory-*.tar.gz && cd -
+python3 /tmp/alpha/software-factory-0.1.0-alpha.1/hooks/factory_release.py update --release
+./factory version && ./factory releases && ./factory doctor
+```
+Record every command's output. Then set the project up: `./factory settings set tasks.source issues`, `./factory settings set mainBranch alpha-test`,
+`./factory settings set commands.test "python3 tests/test_textkit.py"` and blank the other `commands.*`; run `./factory issues setup`.
+(If a `settings set` name is wrong, use `./factory settings list` and record that the name was not what the plan said.)
+Commit the install on a branch `install-alpha` and push it; open a PR into `alpha-test` and leave it for the owner.
+Record anything that was hard, unclear, or needed a workaround: that is the most valuable finding of this step.
+Issues #1 to #3 already exist in the repo and carry `factory:ready` once `factory issues setup` has made the labels (add the label yourself if it is missing: `gh issue edit N --add-label factory:ready`).
+All pull requests from now on go into `alpha-test`, not `main`.
 
 ## Step 0: machine report (read-only)
 Run `./factory doctor` and paste the whole output. Also: `claude --version`, `gh auth status`, `python3 --version`,
