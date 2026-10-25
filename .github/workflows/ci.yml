@@ -1,0 +1,79 @@
+# Software factory CI: the pull-request gate merges only when these checks are green.
+# Adjust the setup and the commands to match .claude/factory.json.
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches: [main]
+
+concurrency:
+  # A label change re-runs only the Factory guard, in its own group so it can't cancel a code run.
+  group: ci-${{ github.ref }}-${{ contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && 'label' || 'code' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+# Where the jobs run (`factory ci use local|github`, README.md "CI"). Two lanes, each from a repo variable:
+# - light jobs, the Factory guard (and anything else short that runs on label changes, which are the dev manager's
+#   merge steps): vars.CI_RUNS_ON_LIGHT, for example ["self-hosted","<repo>-light"], a small runner that takes
+#   nothing else, so a 30-second check never waits behind a 15-minute build. Unset: the heavy lane's runners.
+# - heavy jobs (typecheck, tests, build, browsers): vars.CI_RUNS_ON, for example ["self-hosted","<repo>-local"].
+# Neither set: GitHub's runners. A pull request from another repository (a fork) always runs on GitHub's runners.
+
+jobs:
+  guard:
+    # The factory guard: test and golden-file edits, skips, new dependencies, decision numbers, task ticks.
+    # It runs here, where the coding agent can't edit around it. The dev manager clears reviewable findings with
+    # the `tests-reviewed` / `deps-reviewed` labels.
+    name: Factory guard
+    if: github.event_name == 'pull_request'
+    # The light lane.
+    runs-on: ${{ fromJSON(github.event.pull_request && github.event.pull_request.head.repo.full_name != github.repository && '"ubuntu-latest"' || vars.CI_RUNS_ON_LIGHT || vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - env:
+          # Passed through env, never inlined into the script: branch names and labels are untrusted text.
+          BASE: ${{ github.base_ref }}
+          BRANCH: ${{ github.head_ref }}
+          LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: python3 .claude/hooks/factory_guard.py --base "origin/$BASE" --branch "$BRANCH" --labels "$LABELS"
+      - name: Lessons file (at most lessonsCap one-line lessons, each with an example or a link)
+        run: python3 .claude/hooks/factory_lessons.py check
+
+  check:
+    name: Typecheck, lint, test, build
+    if: ${{ !contains(fromJSON('["labeled","unlabeled"]'), github.event.action) }}
+    # The heavy lane.
+    runs-on: ${{ fromJSON(github.event.pull_request && github.event.pull_request.head.repo.full_name != github.repository && '"ubuntu-latest"' || vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shared remote cache (optional)
+        # The Turborepo cache of the factory machine, shared with the agents (README.md, "A shared build cache").
+        # Skipped for a pull request from another repository: it gets no secrets and runs on GitHub's runners. With
+        # the repository variables and secrets unset, or the cache not answering, the job builds as it always did.
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          TURBO_API: ${{ vars.TURBO_API }}
+          TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
+        run: python3 .claude/hooks/factory_turbo.py ci-env >> "$GITHUB_ENV"
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - name: Style checks (styles[].check in .claude/factory.json)
+        run: python3 .claude/hooks/style_checks.py
+      - run: pnpm test
+      - run: pnpm build
