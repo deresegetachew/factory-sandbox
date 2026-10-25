@@ -20,7 +20,7 @@
   "plan": "docs/build-plan.md",
   "blocked": "docs/blocked.md",
   "decisions": "docs/decisions",
-  "mainBranch": "alpha-test",
+  "mainBranch": "main",
   "commands": {
     "install": "",
     "typecheck": "",
