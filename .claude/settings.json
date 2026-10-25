@@ -1,0 +1,173 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git checkout*)",
+      "Bash(git switch*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git push*)",
+      "Bash(git pull*)",
+      "Bash(git fetch*)",
+      "Bash(gh pr *)",
+      "Bash(docker compose *)",
+      "Bash(python3 .claude/hooks/*)",
+      "Bash(npm run *)",
+      "Bash(npm test*)",
+      "Bash(npm ci*)",
+      "Bash(git branch --show-current*)",
+      "Bash(git merge origin/*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.local)",
+      "Read(./.env.*.local)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push --no-verify*)",
+      "Bash(git push origin main*)",
+      "Edit(./.claude/**)",
+      "Edit(./CLAUDE.md)",
+      "Edit(./.mcp.json)",
+      "Edit(./docs/PRD.md)",
+      "Bash(gh api *)",
+      "Edit(./vendor/**)",
+      "Bash(git push * HEAD:main*)",
+      "Bash(git push *:main*)",
+      "Bash(git push * main)",
+      "Bash(git branch -D*)",
+      "Bash(git branch -f*)",
+      "Bash(git push *refs/heads/main*)",
+      "Bash(git push * +*)",
+      "Bash(git push * -f*)",
+      "Bash(git push * --force*)",
+      "Bash(git push --mirror*)",
+      "Bash(git push * --mirror*)",
+      "Bash(git push * --delete*)",
+      "Bash(git push --delete*)",
+      "Bash(git push -d *)",
+      "Bash(git push * -d *)",
+      "Bash(gh alias *)",
+      "Bash(factory settings set*)",
+      "Bash(factory settings unset*)",
+      "Bash(./factory settings set*)",
+      "Bash(./factory settings unset*)",
+      "Bash(factory settings pr*)",
+      "Bash(./factory settings pr*)",
+      "Bash(factory settings interactive*)",
+      "Bash(./factory settings interactive*)",
+      "Bash(factory settings -i*)",
+      "Bash(./factory settings -i*)",
+      "Bash(factory settings --local*)",
+      "Bash(./factory settings --local*)",
+      "Bash(factory update*)",
+      "Bash(./factory update*)",
+      "Bash(factory rollback*)",
+      "Bash(./factory rollback*)",
+      "Bash(*factory_release*)",
+      "Bash(*factory_setting*)",
+      "Bash(factory lessons add*)",
+      "Bash(factory lessons prune*)",
+      "Bash(./factory lessons add*)",
+      "Bash(./factory lessons prune*)",
+      "Bash(*factory_lessons.py add*)",
+      "Bash(*factory_lessons.py prune*)",
+      "Bash(factory autostart install*)",
+      "Bash(factory autostart uninstall*)",
+      "Bash(./factory autostart install*)",
+      "Bash(./factory autostart uninstall*)",
+      "Bash(*factory_autostart*)",
+      "Bash(factory resume*)",
+      "Bash(./factory resume*)",
+      "Bash(*factory_resume*)",
+      "Bash(factory manager-claims*)",
+      "Bash(./factory manager-claims*)",
+      "Bash(*factory_manager_claims*)",
+      "Bash(factory heartbeat install*)",
+      "Bash(factory heartbeat uninstall*)",
+      "Bash(factory heartbeat run*)",
+      "Bash(./factory heartbeat install*)",
+      "Bash(./factory heartbeat uninstall*)",
+      "Bash(./factory heartbeat run*)",
+      "Bash(*factory_heartbeat*)",
+      "Bash(gh pr review *--approve*)",
+      "Bash(gh pr comment *factory-approved*)",
+      "Bash(gh pr comment *factory-answer*)",
+      "Bash(gh pr comment *factory-mustfix*)",
+      "Bash(gh pr comment *factory-review-claim*)",
+      "Bash(gh pr comment *factory-claim-release*)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/check.py",
+            "timeout": 600
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/factory_stop.py",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/factory_agents.py hook",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pr-gate.py",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/factory_session.py",
+            "timeout": 600
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/factory_agents.py hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/factory_agents.py hook",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}
