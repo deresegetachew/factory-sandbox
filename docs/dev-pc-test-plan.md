@@ -36,7 +36,7 @@ Run `./factory doctor` and paste the whole output. Also: `claude --version`, `gh
 Record each output. Expected: the coding agent would take issue 1; `factory next` says it does not claim.
 
 ## Step 2: one coding-agent task, with tokens measured
-Issue #1 asks for `truncate(text, n)`. Decision for the open question: for `n <= 0` return an empty string and add a test.
+Issue #1 asks for `truncate(text, n)`. Decision for the open question (the dev manager took the simplest option; the owner can change it): for `n <= 0` return an empty string and add a test.
 Post that decision as a comment on issue #1 first (`gh issue comment 1 --body "Decision: n <= 0 returns an empty string, with a test."`).
 Then run:
 ```
