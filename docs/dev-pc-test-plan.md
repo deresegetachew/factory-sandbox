@@ -3,7 +3,7 @@
 You are a Claude Code session on the owner's dev-pc. Run this plan against this repo (`deresegetachew/factory-sandbox`,
 a throwaway project with the software factory installed) and write down exactly what happens. The goal is to find out
 whether the factory works end to end on a real machine, and what it costs in tokens. Do not fix the factory here: record
-each problem; the owner turns them into issues in `deresegetachew/my-skills`.
+each problem; the coordinator and the owner turn them into issues in `deresegetachew/my-skills`.
 
 ## Rules for you
 - Never push to `main`, never force-push, never print or commit a secret, never edit anything under `.claude/`, `CLAUDE.md`.
@@ -11,11 +11,13 @@ each problem; the owner turns them into issues in `deresegetachew/my-skills`.
 - Record numbers as the tools print them. Do not estimate or invent any.
 - Work in a fresh clone: `git clone https://github.com/deresegetachew/factory-sandbox && cd factory-sandbox && git checkout alpha-test`.
 
-## Talking to the dev manager
-The dev manager (a Claude session in the cloud, which wrote this plan) will read messages from you. Issue #6 in this repo is the channel.
-- A question, a blocker or an interim report: comment on issue #6 with a first line `<!-- factory-question -->` or `<!-- factory-report -->`, and name the plan step you are on.
-- Check issue #6 for a comment starting `<!-- factory-answer -->` at the start of each step and whenever you are stuck.
-- The dev manager does not watch live. Do not wait for an answer unless you are fully blocked: record the problem and go on to the next step.
+## Talking to the test coordinator
+The test coordinator is a Claude session in the cloud. It wrote this plan and will read messages from you. It is not the
+factory's own dev manager: the factory you install in step A has its own dev manager, product owner and coding agents,
+and they know nothing about the coordinator. Issue #6 in this repo is the channel between you and the coordinator.
+- A question, a blocker or an interim report: comment on issue #6 with a first line `<!-- test-question -->` or `<!-- test-report -->`, and name the plan step you are on. Do not use the factory's own markers (`factory-question`, `factory-answer`) there: the factory's dev manager reacts to those.
+- Check issue #6 for a comment starting `<!-- test-answer -->` at the start of each step and whenever you are stuck.
+- The coordinator does not watch live; it reads the channel every few minutes. Do not wait for an answer unless you are fully blocked: record the problem and go on to the next step.
 - If you can message other Claude sessions on your machine, you may also try a message to the name `claude-5b`; do not rely on it.
 - Do not paste secrets, tokens or the contents of `~/.claude.json` in the channel.
 
@@ -65,7 +67,7 @@ Run `./factory doctor` and paste the whole output. Also: `claude --version`, `gh
 Record each output. Expected: the coding agent would take issue 1; `factory next` says it does not claim.
 
 ## Step 2: one coding-agent task, with tokens measured
-Issue #1 asks for `truncate(text, n)`. Decision for the open question (the dev manager took the simplest option; the owner can change it): for `n <= 0` return an empty string and add a test.
+Issue #1 asks for `truncate(text, n)`. Decision for the open question (the test coordinator took the simplest option; the owner can change it): for `n <= 0` return an empty string and add a test.
 Post that decision as a comment on issue #1 first (`gh issue comment 1 --body "Decision: n <= 0 returns an empty string, with a test."`).
 Then run:
 ```
