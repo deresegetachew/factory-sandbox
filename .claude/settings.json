@@ -20,7 +20,13 @@
       "Bash(npm test*)",
       "Bash(npm ci*)",
       "Bash(git branch --show-current*)",
-      "Bash(git merge origin/*)"
+      "Bash(git merge origin/*)",
+      "Write(src/**)",
+      "Write(tests/**)",
+      "Edit(src/**)",
+      "Edit(tests/**)",
+      "Bash(python3 tests/*)",
+      "Bash(./factory run-check *)"
     ],
     "deny": [
       "Read(./.env)",
