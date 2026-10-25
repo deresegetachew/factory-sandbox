@@ -11,6 +11,14 @@ each problem; the owner turns them into issues in `deresegetachew/my-skills`.
 - Record numbers as the tools print them. Do not estimate or invent any.
 - Work in a fresh clone: `git clone https://github.com/deresegetachew/factory-sandbox && cd factory-sandbox && git checkout alpha-test`.
 
+## Talking to the dev manager
+The dev manager (a Claude session in the cloud, which wrote this plan) will read messages from you. Issue #6 in this repo is the channel.
+- A question, a blocker or an interim report: comment on issue #6 with a first line `<!-- factory-question -->` or `<!-- factory-report -->`, and name the plan step you are on.
+- Check issue #6 for a comment starting `<!-- factory-answer -->` at the start of each step and whenever you are stuck.
+- The dev manager does not watch live. Do not wait for an answer unless you are fully blocked: record the problem and go on to the next step.
+- If you can message other Claude sessions on your machine, you may also try a message to the name `claude-5b`; do not rely on it.
+- Do not paste secrets, tokens or the contents of `~/.claude.json` in the channel.
+
 ## What was already found on a cloud machine (do not re-report, but say whether dev-pc is different)
 1. A clone of an empty repo has no `origin/main`, so the loop crashed with a traceback. Check: `git branch -r` shows `origin/main`.
 2. Claude Code ignored the allow list because the folder was not trusted. Check: does a headless run print
