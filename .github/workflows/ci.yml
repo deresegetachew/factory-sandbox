@@ -65,15 +65,7 @@ jobs:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
         run: python3 .claude/hooks/factory_turbo.py ci-env >> "$GITHUB_ENV"
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm lint
       - name: Style checks (styles[].check in .claude/factory.json)
         run: python3 .claude/hooks/style_checks.py
-      - run: pnpm test
-      - run: pnpm build
+      - name: Test (commands.test in .claude/factory.json)
+        run: python3 tests/test_textkit.py
