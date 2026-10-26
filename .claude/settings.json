@@ -25,7 +25,9 @@
       "Bash(cd *)",
       "Bash(ls *)",
       "Bash(mkdir -p *)",
-      "Bash(git rev-parse*)"
+      "Bash(git rev-parse*)",
+      "Bash(python3 -m unittest*)",
+      "Bash(./factory run-check*)"
     ],
     "deny": [
       "Read(./.env)",
