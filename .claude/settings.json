@@ -26,7 +26,12 @@
       "Edit(src/**)",
       "Edit(tests/**)",
       "Bash(python3 tests/*)",
-      "Bash(./factory run-check *)"
+      "Bash(./factory run-check *)",
+      "Edit(tmp/**)",
+      "Bash(cd *)",
+      "Bash(ls *)",
+      "Bash(mkdir -p *)",
+      "Bash(git rev-parse*)"
     ],
     "deny": [
       "Read(./.env)",
