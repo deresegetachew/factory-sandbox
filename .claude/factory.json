@@ -117,5 +117,11 @@
     "bind": "127.0.0.1",
     "port": 3335,
     "secretsCommand": ""
+  },
+  "permissions": {
+    "allow": [
+      "Bash(python3 -m unittest*)",
+      "Bash(./factory run-check*)"
+    ]
   }
 }
