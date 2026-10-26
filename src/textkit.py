@@ -3,3 +3,7 @@
 
 def slugify(text):
     return "-".join("".join(c.lower() if c.isalnum() else " " for c in text).split())
+
+
+def word_count(text):
+    return len(text.split())
