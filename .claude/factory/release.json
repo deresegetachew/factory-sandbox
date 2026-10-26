@@ -128,7 +128,7 @@
     ".claude/hooks/style_checks.py": "1aec9e5986d4c216073107a435e103e19d9b2f76f3b495757bd101a18229f878",
     ".claude/hooks/wait_for_merge.sh": "70ae400f69a483931447320f707e0d4a347fa70da26a6c628f74bdb78ae782dc",
     ".claude/manager/settings.json": "352e27a438fb0967dede3034cce81a5ae89f811bd2f907817d633cb61d59153d",
-    ".claude/settings.json": "a8028b51a91f589b418cbfdc82b8edbcd18b603ffb24b23f278f55e5caa3c6b7",
+    ".claude/settings.json": "b4d2e96c556e7be032943b6312153e02c978d4358639e71012cdf0b05f9d5bf9",
     ".claude/skills/design-check/SKILL.md": "0fd4a955e4db246d0051cda60c3ed219a543f21d1379951bc337729576c72a14",
     ".claude/skills/eval/SKILL.md": "e8d1db13a2c745bd71241b4eb28d234b9372d782534dc6bfedacacbb388e0975",
     ".claude/skills/manage-pass/SKILL.md": "9e1828716388b3403603f493766fe72d14ae35be526ea189dbc56f4ad6f6839c",
