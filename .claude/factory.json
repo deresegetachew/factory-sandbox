@@ -13,7 +13,7 @@
     "abebe"
   ],
   "tasks": {
-    "source": "plan",
+    "source": "issues",
     "staleHours": 3
   },
   "prd": "docs/PRD.md",
