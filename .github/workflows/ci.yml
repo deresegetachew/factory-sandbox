@@ -36,6 +36,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2  # the factory's scripts run on Bun (#252)
         with:
           fetch-depth: 0
       - env:
@@ -43,9 +44,9 @@ jobs:
           BASE: ${{ github.base_ref }}
           BRANCH: ${{ github.head_ref }}
           LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
-        run: python3 .claude/hooks/factory_guard.py --base "origin/$BASE" --branch "$BRANCH" --labels "$LABELS"
+        run: bun --no-env-file .claude/hooks/factory_guard.ts --base "origin/$BASE" --branch "$BRANCH" --labels "$LABELS"
       - name: Lessons file (at most lessonsCap one-line lessons, each with an example or a link)
-        run: python3 .claude/hooks/factory_lessons.py check
+        run: bun --no-env-file .claude/hooks/factory_lessons.ts check
 
   check:
     name: Install, test
@@ -55,12 +56,13 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2  # the factory's scripts run on Bun (#252)
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
       - name: Install (commands.install in .claude/factory.json)
-        run: python3 .claude/hooks/factory_stack.py run install
+        run: bun --no-env-file .claude/hooks/factory_stack.ts run install
       - name: Style checks (styles[].check in .claude/factory.json)
-        run: python3 .claude/hooks/style_checks.py
+        run: bun --no-env-file .claude/hooks/style_checks.ts
       - name: Test (commands.test in .claude/factory.json)
-        run: python3 .claude/hooks/factory_stack.py run test
+        run: bun --no-env-file .claude/hooks/factory_stack.ts run test
