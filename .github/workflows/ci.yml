@@ -36,9 +36,9 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2  # the factory's scripts run on Bun (#252)
         with:
           fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2  # the factory's scripts run on Bun (#252)
       - env:
           # Passed through env, never inlined into the script: branch names and labels are untrusted text.
           BASE: ${{ github.base_ref }}
