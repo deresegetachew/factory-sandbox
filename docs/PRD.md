@@ -36,6 +36,10 @@ they read each month and by tag. Version 1 is for a single user and has no login
 - US-15: I can export my shelf as a Markdown file, grouped by status, with ratings shown as stars.
 - US-16: I see the items I am currently reading in a strip at the top of the page, and can mark one finished with one click.
 
+### Version 1.2
+
+- US-17: I can copy an item as a citation, `Author, Title (URL)`, to the clipboard with one click.
+
 ## How it is built
 
 - **Bun only.** The server is `Bun.serve`, storage is `bun:sqlite`, tests are `bun test`. No npm runtime packages;
@@ -66,6 +70,11 @@ they read each month and by tag. Version 1 is for a single user and has no login
 - **Currently reading strip (v1.1).** The top of the page lists the items with status `reading`, each with a
   "Finished" button that sets the status to `done` (so `finished_at` is now). The strip is hidden when nothing is being
   read; the list and the stats update after a click.
+- **Copy as citation (v1.2).** Each item in the list has a "Copy as citation" button that copies one line of plain
+  text to the clipboard: `Author, Title (URL)`. Without an author it is `Title (URL)`; without a URL it is
+  `Author, Title`; with neither, just `Title`. The text is what the user typed (trimmed), not escaped or reformatted.
+  The button says "Copied" briefly on success; when the browser refuses the clipboard, the line is shown selected so
+  the user can copy it by hand. It is UI only: no new API route.
 - **CSV format.** A header row: `title,author,url,kind,status,rating,notes,tags,created_at,finished_at`. Tags are joined
   with `;` in one cell. Quoting follows RFC 4180 (commas, quotes and line breaks inside a cell). UTF-8.
 
