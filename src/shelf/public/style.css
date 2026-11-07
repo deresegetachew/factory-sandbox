@@ -1,0 +1,157 @@
+:root {
+  --fg: #1d1d1f;
+  --muted: #5f6368;
+  --line: #d9d9de;
+  --accent: #1f5fbf;
+  --error: #a4161a;
+  --bg: #fafaf7;
+  font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans", "Noto Sans Ethiopic", "Noto Sans JP", sans-serif;
+  color: var(--fg);
+  background: var(--bg);
+  line-height: 1.45;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* `display` rules below (form, .error) would otherwise override the hidden attribute. */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+h1 {
+  margin: 0 0 1rem;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin: 1.5rem 0 0.5rem;
+}
+
+/* Long titles, URLs and notes wrap instead of widening the page on a 375 px screen. */
+main,
+li,
+a,
+p,
+span {
+  overflow-wrap: anywhere;
+}
+
+form {
+  display: grid;
+  gap: 0.5rem;
+}
+
+label {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+  min-height: 2.5rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--fg);
+  min-width: 0;
+}
+
+button {
+  cursor: pointer;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+button.secondary {
+  background: #fff;
+  color: var(--accent);
+}
+
+button.danger {
+  background: #fff;
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+  gap: 0.5rem;
+}
+
+.error {
+  color: var(--error);
+  border-left: 3px solid var(--error);
+  padding: 0.3rem 0.6rem;
+  background: #fff3f3;
+}
+
+#items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.75rem;
+  background: #fff;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.item .title {
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.item .author,
+.item .kind,
+.item .tags {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.item .kind {
+  text-transform: capitalize;
+}
+
+.item .notes {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.item .controls,
+.item .buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.empty {
+  color: var(--muted);
+  font-style: italic;
+}
