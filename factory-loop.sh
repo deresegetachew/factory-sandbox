@@ -23,8 +23,8 @@
 #   (or: ./factory loop [-i] [N])
 #
 # Several loops can run at once: start this script again in another terminal. Each loop gets its own checkout
-# (the first uses this folder, the others a git worktree in <project>-agents/<name>) and claims each task in
-# a shared lock file before building it, so no two loops build the same task (.claude/hooks/factory_claims.ts).
+# (a git worktree in <project>-agents/<name>, the first agent's too: this folder stays on main, #572) and claims each
+# task in a shared lock file before building it, so no two loops build the same task (.claude/hooks/factory_claims.ts).
 # Loops on other machines see each other's task/<id>-... branches on the remote and skip those tasks too.
 # Parallel loops pay off when the plan has tasks that don't build on each other; the dev manager merges in order.
 #
@@ -103,6 +103,12 @@ resume_first="${FACTORY_RESUME:-0}"; unset FACTORY_RESUME  # for this first task
 if [ -n "${FACTORY_RELOAD_DIR:-}" ]; then
   # Restarted by reload_if_changed: same pid, so the same agent and folder (its checkout claim still holds).
   agent="$FACTORY_RELOAD_AGENT"; dir="$FACTORY_RELOAD_DIR"; unset FACTORY_RELOAD_AGENT FACTORY_RELOAD_DIR
+  # An older loop built in the project folder (#572). Its task is done (it restarts between tasks), so it moves to its
+  # own worktree now; what it left in the project folder stays as it is.
+  if [ "$role" = coding-agent ] && [ "$(cd "$dir" 2>/dev/null && pwd -P)" = "$(cd "$(git rev-parse --git-common-dir)/.." && pwd -P)" ]; then
+    moved="$(fh "$hooks/factory_claims" relocate --agent "$agent" --pid $$)" || exit 1
+    [ -n "$moved" ] && { echo "[$agent] the project folder stays on $(setting mainBranch main) now: moving to $moved"; dir="$moved"; }
+  fi
 else
   # The coding agent's call is today's; another role names itself and its role, and may ask for a name.
   if [ "$role" = coding-agent ]; then
@@ -201,6 +207,12 @@ home="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
 # role. --mcp-config takes several values, so another flag must follow it.
 isolate() {
   local cfg
+  # The `claude` to run (#568): on the PATH, else ~/.local/bin, else ~/.claude/local, so a loop started from a shell that is
+  # not a login shell still finds it. None: the claude_missing error says where it looked, and no session starts.
+  claude_bin=claude
+  if [ -f "$hooks/factory_claude.ts" ]; then
+    claude_bin="$(fh "$hooks/factory_claude" path)" || { echo "[$agent] Claude Code was not found (the error above says where it looked and what to do); no session was started."; exit 1; }
+  fi
   cfg="$(fh "$hooks/factory_mcp" --as "$agent" --role "$role")" || cfg='{"mcpServers":{}}'
   [ -n "$cfg" ] || cfg='{"mcpServers":{}}'
   if [ "$role" = coding-agent ]; then
@@ -359,11 +371,11 @@ role_pass() {
   prompt="$(fh "$hooks/factory_roles" prompt "$role" "$agent" $([ "$discover" = 1 ] && echo discover))"
   fh "$hooks/factory_agents" ping --agent "$agent" --status "$item" >/dev/null 2>&1 || true
   if [ "$interactive" = 1 ]; then
-    if [ "${FACTORY_REMOTE_CONTROL:-1}" = 1 ]; then claude "${claude_flags[@]}" --remote-control="$agent" "$prompt"; else claude "${claude_flags[@]}" "$prompt"; fi
+    if [ "${FACTORY_REMOTE_CONTROL:-1}" = 1 ]; then "$claude_bin" "${claude_flags[@]}" --remote-control="$agent" "$prompt"; else "$claude_bin" "${claude_flags[@]}" "$prompt"; fi
     rc=$?; stty sane 2>/dev/null
   else
     trust_gate || exit 1
-    claude "${claude_flags[@]}" ${headless_flags[@]+"${headless_flags[@]}"} -p "$prompt"; rc=$?
+    "$claude_bin" "${claude_flags[@]}" ${headless_flags[@]+"${headless_flags[@]}"} -p "$prompt"; rc=$?
   fi
   [ "$discover" = 0 ] || exit "$rc"
   [ "$rc" = 0 ] || return 1
@@ -470,9 +482,9 @@ for ((n = 1; n <= limit; n++)); do
     rc="${FACTORY_REMOTE_CONTROL:-}"; [ -n "$rc" ] || rc="$(fh "$hooks/factory_machine" remote 2>/dev/null || echo 1)"
     keep_start "$id"
     if [ "$rc" = 1 ]; then
-      claude "${claude_flags[@]}" --remote-control="$agent $id" "$prompt" || true
+      "$claude_bin" "${claude_flags[@]}" --remote-control="$agent $id" "$prompt" || true
     else
-      claude "${claude_flags[@]}" "$prompt" || true
+      "$claude_bin" "${claude_flags[@]}" "$prompt" || true
     fi
     keep_stop
     stty sane 2>/dev/null
@@ -494,7 +506,7 @@ for ((n = 1; n <= limit; n++)); do
   else
     trust_gate || { fh "$hooks/factory_claims" release --agent "$agent" --tasks-only >/dev/null; give_back "$id"; exit 1; }
     keep_start "$id"
-    claude "${claude_flags[@]}" ${headless_flags[@]+"${headless_flags[@]}"} -p "$prompt" || echo "[$agent] (the run for $id exited with an error; the next pass picks up from git)"
+    "$claude_bin" "${claude_flags[@]}" ${headless_flags[@]+"${headless_flags[@]}"} -p "$prompt" || echo "[$agent] (the run for $id exited with an error; the next pass picks up from git)"
     keep_stop
   fi
   fh "$hooks/factory_claims" release --agent "$agent" --tasks-only >/dev/null  # the pushed branch marks it now
