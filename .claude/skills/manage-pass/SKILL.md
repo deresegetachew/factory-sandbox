@@ -13,7 +13,8 @@ there is nothing to do.
 
 **Arguments.** `/manage-pass` alone is a whole pass. `/manage-pass pr-417`, `/manage-pass question-103`, `/manage-pass agent-menelik`
 or `/manage-pass issue-20` works only on that item and then exits (the orchestrator, `factory dev-manager loop`, starts one
-session per item and does not start another for it while this one runs). `--dry-run` anywhere in the arguments means: read
+session per item and does not start another for it while this one runs). `question-<n>` is every open question on #n:
+answer them all. `--dry-run` anywhere in the arguments means: read
 everything, print what you would do, one line each, and write nothing (no comment, no label, no merge, no note, no lease).
 
 **When the orchestrator started you.** Your prompt carries a fact sheet for the item (why it is on the list, the PR's head, review
@@ -31,6 +32,24 @@ again, then:
   The note is memory for the next session; GitHub's labels and comments stay the truth. Do not put secrets in it.
 - *Owner items.* Items for the owner (a queued CI, a down or idle agent, the manager's own approved PR) are posted by the
   orchestrator. Do not repeat them; if your item needs the owner, post one `factory-owner-ask` with its own `id`.
+
+## When the board is on
+
+With `tasks.source` or `messaging.transport` set to `board` (or no transport set, on a machine with a board), your
+session has one MCP server, `board`, as a manager.
+Everything else here stays the same; the PR gate, reviews, CI and merges stay on GitHub. With the board off, use the
+commands below and nothing changes.
+
+- **Start** with `board_prime`, then `board_on_me` for the questions and asks addressed to you.
+- **Questions and answers:** read the thread with `board_thread`; answer with `board_post`, replying on that thread.
+- **What you decide** on a task (a must-fix's reason, a hold, a blocker) goes on it with `board_note`.
+- **Owner asks** go with `factory board ask <id> <text>` (or `--body -` with the text on stdin), never as a
+  hand-written comment. The loop runs `factory board mirror` before each pass, so GitHub's copy stays current, then
+  `factory board sweep`, which frees the claims of agents that went quiet.
+- **Dead agents:** `factory agents sweep` reads the agents' liveness on the board and marks silent ones down; their
+  claims go back to ready by the board's sweep rules.
+- **Cards:** `board_move` (with a reason when it takes a claim back), `board_assign`, `board_link` and `board_unlink`,
+  only for what this skill already lets you do on your own; `board_create` for a review follow-up task.
 
 ## What you do on your own, and what you ask the owner first
 
@@ -133,6 +152,11 @@ must-fix or a fix for the owner.
 
 - Never merge without a `factory-approved sha=<head>` for exactly the head you merge, with CI judged green as above.
 - Never merge a pull request you opened, or one from a `manager/` branch. Yours wait for the owner (an owner-queue ask).
+- Never merge a pull request that changes the project's `.claude/` (a `factory settings pr`, permissions, `settings.json`,
+  the agents' definitions): the owner merges it. Review it, then write an owner-queue ask that names it.
+- Never merge a UI pull request without screenshots: one that changes what a user sees (a screen, a page, a component, a
+  style) attaches phone and desktop screenshots, with the reference beside them when the project has one. None attached:
+  post a must-fix that asks for them.
 - Never `@copilot` or `@<agent>`, or mention anyone. The only mention is the owner's login in an owner-queue ask, and only when
   `manager.notify` names one.
 - Never add a label that does not exist; never force-push, delete refs, or push to main; never touch `.github/` content or
