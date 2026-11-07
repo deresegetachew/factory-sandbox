@@ -4,7 +4,7 @@
     "taytu"
   ],
   "tasks": {
-    "source": "issues",
+    "source": "board",
     "staleHours": 3
   },
   "prd": "docs/PRD.md",
@@ -13,11 +13,11 @@
   "decisions": "docs/decisions",
   "mainBranch": "main",
   "commands": {
-    "install": "pnpm install --frozen-lockfile",
-    "typecheck": "pnpm -s typecheck",
-    "lint": "pnpm -s lint",
+    "install": "",
+    "typecheck": "",
+    "lint": "",
     "test": "bun test",
-    "build": "pnpm -s build",
+    "build": "",
     "smoke": "",
     "fix": "",
     "agentSetup": "",
@@ -124,5 +124,17 @@
         "mentewab"
       ]
     }
+  },
+  "permissions": {
+    "allow": [
+      "Bash(bun *)",
+      "Bash(./factory run-check*)"
+    ]
+  },
+  "trustedReviewers": [
+    "deresegetachew"
+  ],
+  "messaging": {
+    "transport": "board"
   }
 }

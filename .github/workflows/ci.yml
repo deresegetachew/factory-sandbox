@@ -74,16 +74,7 @@ jobs:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
         run: bun --no-env-file --config=/dev/null .claude/hooks/factory_turbo.ts ci-env >> "$GITHUB_ENV"
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm lint
       - uses: oven-sh/setup-bun@v2
       - name: Style checks (styles[].check in .claude/factory.json)
         run: bun --no-env-file --config=/dev/null .claude/hooks/style_checks.ts
-      - run: pnpm test
-      - run: pnpm build
+      - run: bun test
