@@ -105,6 +105,10 @@ button.danger {
   background: #fff3f3;
 }
 
+#filters {
+  margin-bottom: 1rem;
+}
+
 #items {
   list-style: none;
   padding: 0;

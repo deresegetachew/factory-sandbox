@@ -10,6 +10,7 @@ const FILES: Record<string, { file: string; type: string }> = {
   "/": { file: "index.html", type: "text/html; charset=utf-8" },
   "/app.js": { file: "app.js", type: "text/javascript; charset=utf-8" },
   "/render.js": { file: "render.js", type: "text/javascript; charset=utf-8" },
+  "/filters.js": { file: "filters.js", type: "text/javascript; charset=utf-8" },
   "/style.css": { file: "style.css", type: "text/css; charset=utf-8" },
 };
 
