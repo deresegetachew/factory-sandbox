@@ -3,8 +3,8 @@
 // requests and CI), the agents read live (heartbeats), the pull requests that left the snapshot's open list, and the
 // product owner's open asks. Each item says why in plain words and carries one action the page runs through the
 // confirm it uses elsewhere: Release or Close a task (POST .../tasks/:id/actions/release|close), Close an epic (the same
-// route with the epic's id), Start an agent (POST .../agents/:name/start), or open a page (its output, the PR, CI,
-// Health).
+// route with the epic's id), Start an agent (POST .../agents/:name/start), Start work (one line to a coding agent's
+// session, POST .../agents/:name/chat, which runs `factory say`), or open a page (its output, the PR, CI, Health).
 //
 // The cases, in the order the list shows them:
 //   board-down      the message board can't be reached
@@ -15,6 +15,13 @@
 //   task-quiet      a task in progress whose holder is down, or that nothing moved for
 //                   attention.taskQuietMinutes                                             Release
 //   session-long    a session "working" longer than attention.<role>.maxMinutes          open its output
+//   task-spinning   a task being built whose tokens or working time pass attention.spinFactor
+//                   times the done tasks' median (with 5 done tasks or more), or that had
+//                   attention.spinReviewRounds review rounds with must-fixes, or whose last
+//                   attention.spinFailedCi CI runs failed (#580; factory_task_cost.ts)       open its output
+//   idle-ready      a coding agent idle for attention.idleWithReadyMinutes while a task
+//                   it may take is ready (#591); its session may hold a message typed
+//                   but not sent                                                           Start work
 //   epic-done       an epic whose tasks are all done is still open                         Close
 //   prd-open        a PRD change is still an open PR while tasks are being built (#578)    open the PR
 //   pr-waiting      a PR open longer than attention.prWaitHours with red checks, no
@@ -25,17 +32,21 @@ import type { Config } from "./factory_config.ts";
 import type { Agent, Problem } from "./factory_ui_data.ts";
 import { SETTINGS } from "./factory_settings_schema.ts";
 import type { Views } from "./factory_ui_views.ts";
+import { type Medians, spinReason, type TaskCost } from "./factory_task_cost.ts";
 
-export const ATTENTION_KINDS = ["board-down", "runners-down", "agent-down", "role-down", "task-pr-gone", "task-quiet", "session-long", "epic-done",
-  "prd-open", "pr-waiting"] as const;
+export const ATTENTION_KINDS = ["board-down", "runners-down", "agent-down", "role-down", "task-pr-gone", "task-quiet", "session-long", "task-spinning", "idle-ready",
+  "epic-done", "prd-open", "pr-waiting"] as const;
 export type AttentionKind = (typeof ATTENTION_KINDS)[number];
 
-/** The one thing an item offers. A task action (release, close) runs on `task`; start on `agent`; open goes to `link`. */
+/** The one thing an item offers. A task action (release, close) runs on `task`; start on `agent`; say sends `text` to
+ *  `agent`'s session; open goes to `link`. */
 export interface AttentionAction {
-  kind: "release" | "close" | "start" | "open";
+  kind: "release" | "close" | "start" | "say" | "open";
   label: string;
   task?: string;
   agent?: string;
+  /** For say: the one line sent (`/next-task`). */
+  text?: string;
   /** For open: the page (`agent:fasil`, `pr:21`, `view:ci`, `page:health`). */
   link?: string;
 }
@@ -65,6 +76,10 @@ export interface Limits {
   taskQuietMinutes: number;
   prWaitHours: number;
   maxMinutes: Record<string, number>;
+  idleWithReadyMinutes: number;
+  spinFactor: number;
+  spinReviewRounds: number;
+  spinFailedCi: number;
 }
 
 export interface AttentionInput {
@@ -75,6 +90,8 @@ export interface AttentionInput {
   gone: GonePull[];
   /** The product owner's open asks. */
   productAsks: number;
+  /** What each task took (#580) and the done tasks' medians; null or left out while not read (no spinning is judged). */
+  costs?: { tasks: TaskCost[]; medians: Medians } | null;
   now?: number;
 }
 
@@ -104,7 +121,9 @@ export function limitsOf(cfg: Config | null): Limits {
   const maxMinutes: Record<string, number> = {};
   for (const r of ROLES) maxMinutes[r] = whole(obj(a[r]).maxMinutes, dflt(`attention.${r}.maxMinutes`));
   return { taskQuietMinutes: whole(a.taskQuietMinutes, dflt("attention.taskQuietMinutes")), prWaitHours: whole(a.prWaitHours, dflt("attention.prWaitHours")),
-    maxMinutes };
+    maxMinutes, idleWithReadyMinutes: whole(a.idleWithReadyMinutes, dflt("attention.idleWithReadyMinutes")),
+    spinFactor: whole(a.spinFactor, dflt("attention.spinFactor")), spinReviewRounds: whole(a.spinReviewRounds, dflt("attention.spinReviewRounds")),
+    spinFailedCi: whole(a.spinFailedCi, dflt("attention.spinFailedCi")) };
 }
 
 /** A task's name as the pages write it: `#7` for an issue, `b3` for a task made on the board. */
@@ -231,6 +250,38 @@ export function attentionOf(i: AttentionInput): AttentionItem[] {
       item("session-long", a.name, { title: `${a.name} has been working for ${plural(m, "minute")}`, agent: a.name, task: a.task,
         reason: `Working for ${plural(m, "minute")}; the limit for ${ROLE_WORD[a.role] ?? "an agent"} is ${max}. It may be stuck.`,
         action: { kind: "open", label: "Open its output", link: `agent:${a.name}` } });
+    }
+    // a coding agent idle while a task it may take is ready (#591)
+    const open = new Set(tasks.filter((t) => t.state !== "done").map((t) => t.id));
+    const mayTake = (t: (typeof tasks)[number], name: string): boolean => t.state === "ready" && !t.holders.length &&
+      (!t.assignee || t.assignee === name) && !t.blockedBy.length && !t.dependsOn.some((d) => open.has(d.replace(/^#/, "")));
+    for (const a of agents) {
+      if (a.role !== "coding-agent" || a.state !== "idle") continue;
+      const idle = minutesSince(a.since, now);
+      if (idle === null || idle < lim.idleWithReadyMinutes) continue;
+      // on the board a ready task says when it last changed: one made ready a minute ago isn't waiting yet
+      const ready = tasks.find((t) => mayTake(t, a.name) && (minutesSince(t.updatedAt, now) ?? idle) >= lim.idleWithReadyMinutes);
+      if (!ready) continue;
+      const unsent = a.prompt === "unsent";
+      item("idle-ready", a.name, { title: unsent ? `${a.name} has a message typed but not sent` : `${a.name} is idle while ${named(ready.id)} is ready`,
+        agent: a.name, task: ready.id,
+        reason: `${a.name} has been idle for ${plural(idle, "minute")} while ${named(ready.id)} ${ready.title} is ready.` +
+          (unsent ? " A message is typed in its session but not sent." : ""),
+        action: { kind: "say", label: "Start work", agent: a.name, text: "/next-task" } });
+    }
+  }
+
+  // a task being built whose agent may be going in circles (#580)
+  if (i.costs) {
+    const costOf = new Map(i.costs.tasks.map((c) => [c.task, c]));
+    for (const t of tasks) {
+      const c = costOf.get(t.id);
+      if (!BUILDING.has(t.state) || !c) continue;
+      const reason = spinReason(c, i.costs.medians, lim);
+      if (!reason) continue;
+      const who = t.holders[0] ?? (c.worker && NAME.test(c.worker) ? c.worker : null);
+      item("task-spinning", t.id, { title: `${named(t.id)} ${t.title}`, task: t.id, agent: who, reason,
+        action: { kind: "open", label: "Open its output", link: who ? `agent:${who}` : "view:tasks" } });
     }
   }
 

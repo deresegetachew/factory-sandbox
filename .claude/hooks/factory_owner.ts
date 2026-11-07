@@ -16,7 +16,8 @@
 //                                            on main says X.Y.Z (the release workflow then publishes it)
 //   factory owner start <role> [name]        starts `factory loop -i` as that role in its own tmux window on this machine,
 //                                            the step `factory loop -i` uses (factory_window.ts), without attaching (#309).
-//                                            A name already running here is refused (`already_running`). It makes sure
+//                                            A name already running here is refused (`already_running`), and a coding
+//                                            agent past this machine's maxCodingAgents (`too_many_agents`, #581, #596). It makes sure
 //                                            the heartbeat daemon runs (`factory heartbeat ensure`) before it starts one
 //   factory owner stop <name>                ends that session's tmux session on this machine; one already ended is said so.
 //                                            A loop outside tmux (nohup, #395) is ended by its checkout claim's pid
@@ -26,19 +27,18 @@
 // (manager_gate.ts) on the exact gh command it runs, and never a pull request that touches protected paths. Answers,
 // releases, starting and stopping stay the owner's. Every other factory session (a coding agent, the product owner) is
 // refused before anything is read or written. Errors are one JSON line `{code, message, fix}` on stderr.
-import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { state as judgeState, JudgeError } from "./factory_ci_judge.ts";
-import { alive as claimAlive, type Claims, HOST, isLoop, stateDir as claimsDir } from "./factory_claims.ts";
+import { isLoop, stateDir as claimsDir } from "./factory_claims.ts";
 import { ownerQueueOnBoard } from "./core/compose.ts";
-import { type Config, load, loadFromMain, toFloat } from "./factory_config.ts";
+import { type Config, load, loadFromMain } from "./factory_config.ts";
 import { ensureDaemon, processes } from "./factory_heartbeat.ts";
 import { type Comment, type Issue } from "./factory_issues.ts";
 import { Exit, pyDumps, pyQuote, run, runMain } from "./factory_lib.ts";
 import { breakMarkers, OWNER_QUEUE_TITLE, openOwnerAsks, ownerAskIds, trustedOf } from "./factory_prs.ts";
 import { TAG_RE } from "./factory_release.ts";
 import { dropStale, endTree, liveSubs, type Sub } from "./factory_subs.ts";
-import { running, sessionName, startLoop } from "./factory_window.ts";
+import { checkCap, loopPid, running, sessionName, startLoop } from "./factory_window.ts";
 
 const REPO = "repos/{owner}/{repo}";
 const VERSION_FILE = "software-factory/VERSION";
@@ -345,23 +345,10 @@ function start(role: string | undefined, name: string | undefined): void {
     refuse("already_running", `${who} is already running on this machine (pid ${pid}, outside tmux); nothing was started.`,
       `Stop it first with \`factory owner stop ${who}\`.`);
   }
+  if (role === "coding-agent") checkCap(who);
   for (const line of ensureDaemon()) console.log(line); // so the agent's state shows as it runs, from its first minute
   startLoop(role, who, ["-i"]);
   console.log("`factory follow <name>` shows it, or its channel in `factory ui`.");
-}
-
-/** The pid of `name`'s live loop on this machine, from its checkout claim, or null (#395). */
-function loopPid(name: string): number | null {
-  let data: Partial<Claims> = {};
-  try {
-    data = JSON.parse(readFileSync(join(claimsDir(), "claims.json"), "utf8")) as Partial<Claims>;
-  } catch {
-    return null;
-  }
-  const claim = data.checkouts?.[name];
-  // only a claim made here: one from another host (or this one under an old name) holds a pid of another machine
-  if (!claim || claim.host !== HOST) return null;
-  return claimAlive(claim, toFloat(load().claimStaleHours ?? 6) ?? 6, true) ? Math.trunc(Number(claim.pid)) : null;
 }
 
 /** Ends a loop that runs outside tmux (nohup, a plain terminal): what runs below it, then the loop itself. */

@@ -12,6 +12,7 @@ import { NAME, tail } from "./factory_messages.ts";
 import * as R from "./factory_remotes.ts";
 import { RemoteError } from "./factory_remotes.ts";
 import { Exit, pyDumps, run, runMain, shQuote, sleepSync, splitLines, which } from "./factory_lib.ts";
+import { checkCap } from "./factory_window.ts";
 
 export const HELP = `\`factory follow\`, \`factory say\`, \`factory remote\` and \`factory agent <name> --detach\` (#106): watch and talk to an
 agent by its name, wherever it runs: on this machine (its own tmux, no remote needed), on a remote, or in the cloud.
@@ -29,7 +30,8 @@ agent by its name, wherever it runs: on this machine (its own tmux, no remote ne
   factory follow --all [--on R]             one read-only pane per session (tiled), in a local tmux
   factory say <agent> "message" [--on R]    send one message, as if typed; the use is logged on that machine (no text).
                                             A busy session is waited for (20 s at most), and Enter is pressed again
-                                            while the text still sits in its prompt box (\`say-unsent\` if it stays)
+                                            while the text still sits in its prompt box (\`say-unsent\` if it stays);
+                                            the same text already in the box is sent, not typed twice
   --on R                                    only remote R; --on local is this machine (the name local is kept for it)
   factory agent <name> --detach             start that agent in a detached tmux session (what the commands above find)
 
@@ -302,7 +304,8 @@ function sayLimits(): [number, number] {
  *  waits (up to `busy` seconds in all) for the session to be idle, types the text, presses Enter, and looks again: while
  *  the prompt line (the last `❯` line) still holds the text, it waits for idle again and presses Enter again, up to
  *  `enters` more times. Claude Code's "How is Claude doing this session?" survey, which swallows what is typed under it,
- *  is dismissed (`0`) before it types or presses Enter. Then the text is still unsent: it prints UNSENT and exits 5. No session: NOSESSION, exit 3; tmux
+ *  is dismissed (`0`) before it types or presses Enter. When the prompt box already holds exactly this text (an earlier
+ *  say's Enter was lost, #591), it only presses Enter. Then the text is still unsent: it prints UNSENT and exits 5. No session: NOSESSION, exit 3; tmux
  *  failing: exit 4. The use is logged there (who, when, which session), never the text. */
 export function sayScript(session: string, who: string, busy: number, enters: number): string {
   return [
@@ -318,8 +321,12 @@ export function sayScript(session: string, who: string, busy: number, enters: nu
     `deadline=$((SECONDS + ${busy}))`,
     'idle() { while busy && [ "$SECONDS" -lt "$deadline" ]; do pause 0.5; done; n=0; ' +
       'while survey && [ "$n" -lt 3 ]; do tmux send-keys -t "$T" 0 || exit 4; n=$((n + 1)); pause 0.5; done; }',
+    // the same text already typed in the prompt box (an earlier say whose Enter was lost, #591): send it, don't type it twice
+    "there() { l=$(pane | grep '❯' | tail -n 1); l=\"${l#*❯}\"; l=\"${l# }\"; l=\"${l%%│*}\"; " +
+      "[ \"$(printf '%s' \"$l\" | sed 's/[[:space:]]*$//')\" = \"$msg\" ]; }",
     'idle',
-    'tmux send-keys -t "$T" -l -- "$msg" && tmux send-keys -t "$T" Enter || exit 4',
+    'if there; then tmux send-keys -t "$T" Enter || exit 4',
+    'else tmux send-keys -t "$T" -l -- "$msg" && tmux send-keys -t "$T" Enter || exit 4; fi',
     'd="${XDG_STATE_HOME:-$HOME/.local/state}/software-factory"; mkdir -p "$d"',
     `printf '%s from=%s via=%s agent=%s\\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" ${shQuote(who)} "\${SSH_CLIENT%% *}" "$S" >>"$d/say.log"`,
     `k=0; pause 0.3`,
@@ -350,8 +357,8 @@ function cmdSay(agent: string, message: string, on: string | null): number {
   if (rc === 3 || out.includes("NOSESSION")) return refuse(gone(session, remote));
   if (rc === 5 || out.includes("UNSENT")) {
     return refuse(new RemoteError("say-unsent", `The message is typed in ${agent}'s prompt box on ${remote}, but its session ` +
-      "hasn't taken it (it stayed busy).", `Press Enter in it: \`factory follow ${agent}\`, then Enter. Don't send it again, ` +
-      "or it is typed twice."));
+      "hasn't taken it (it stayed busy).", `Press Enter in it: \`factory follow ${agent}\`, then Enter, or send the same text ` +
+      "again once it is idle: say then presses Enter and doesn't type it twice."));
   }
   if (rc !== 0) {
     const lines = splitLines(err.trim());
@@ -388,6 +395,7 @@ function cmdDetach(argv: string[]): number {
     console.log(`${agent} is already running (tmux session ${session}). Follow it: factory follow ${agent}`);
     return 0;
   }
+  checkCap(agent); // this machine's maxCodingAgents, as every path that starts a coding agent (#596)
   const top = run(["git", "rev-parse", "--show-toplevel"]).stdout.trim();
   const command = "exec " + [join(top, "factory"), "agent", ...argv].map(shQuote).join(" ");
   const p = run(["tmux", "new-session", "-d", "-s", session, "-c", top, command]);
