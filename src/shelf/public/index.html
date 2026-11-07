@@ -11,6 +11,12 @@
     <main>
       <h1>Shelf</h1>
 
+      <section id="reading" aria-labelledby="reading-heading" hidden>
+        <h2 id="reading-heading">Currently reading</h2>
+        <ul id="reading-items"></ul>
+        <div id="reading-message" class="error" role="alert" hidden></div>
+      </section>
+
       <section aria-labelledby="add-heading">
         <h2 id="add-heading">Add an item</h2>
         <form id="add-form" autocomplete="off">

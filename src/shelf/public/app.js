@@ -2,7 +2,7 @@
 // item's controls to it. The search and filters live in the page URL's query string.
 import { importContentType, importFormat, importProblem, importSummary, statsTables } from "./data.js";
 import { FILTER_KEYS, filtersFromSearch, filtersToSearch, hasFilters, itemsPath } from "./filters.js";
-import { parseTags, renderImportResult, renderList, renderStats, renderTagOptions } from "./render.js";
+import { parseTags, renderImportResult, renderList, renderReadingStrip, renderStats, renderTagOptions } from "./render.js";
 
 const list = document.getElementById("items");
 const addForm = document.getElementById("add-form");
@@ -13,6 +13,9 @@ const tagSelect = filterForm.elements.tag;
 const statsBody = document.getElementById("stats-body");
 const importForm = document.getElementById("import-form");
 const importResult = document.getElementById("import-result");
+const readingSection = document.getElementById("reading");
+const readingList = document.getElementById("reading-items");
+const readingMessage = document.getElementById("reading-message");
 
 /** The filters as the form shows them. */
 function readFilters() {
@@ -105,6 +108,28 @@ async function loadStats() {
   statsBody.replaceChildren(...renderStats(document, statsTables(stats)));
 }
 
+/** Finished in the reading strip: marks the item done (the server sets finished_at), then reloads the page's data. */
+const finish = (id) => change(id, { status: "done" });
+
+/**
+ * Refills the currently reading strip from GET /api/items?status=reading (it ignores the search and filters below);
+ * the strip is hidden when nothing is being read. Its own failure shows in the strip, so the list still loads.
+ * `isCurrent()` is false when a newer load started, so a late answer does not overwrite a newer strip.
+ */
+async function loadReading(isCurrent) {
+  try {
+    const items = await api("GET", "/api/items?status=reading");
+    if (!isCurrent()) return;
+    readingList.replaceChildren(...renderReadingStrip(document, items, finish));
+    show(readingMessage, "");
+    readingSection.hidden = items.length === 0;
+  } catch (e) {
+    if (!isCurrent()) return;
+    show(readingMessage, e.message);
+    readingSection.hidden = false;
+  }
+}
+
 /** Shows a short message in the import result area (as text). */
 function showImportMessage(text) {
   const p = document.createElement("p");
@@ -153,7 +178,12 @@ let loadSeq = 0;
 async function load() {
   const seq = ++loadSeq;
   try {
-    const [items] = await Promise.all([api("GET", itemsPath(filters)), loadTags(), loadStats()]);
+    const [items] = await Promise.all([
+      api("GET", itemsPath(filters)),
+      loadTags(),
+      loadStats(),
+      loadReading(() => seq === loadSeq),
+    ]);
     if (seq !== loadSeq) return;
     const emptyText = hasFilters(filters) ? "No items match" : "Nothing on your shelf yet";
     list.replaceChildren(...renderList(document, items, actions, emptyText));
