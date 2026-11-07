@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { apiError } from "./errors";
+import { normalizeTags, type tagStore } from "./tags";
 
 export const KINDS = ["book", "article"] as const;
 export const STATUSES = ["to_read", "reading", "done"] as const;
@@ -20,6 +21,9 @@ export type Item = {
 
 /** The fields a person may set. Every key is optional here; `validateItemInput` checks what is required. */
 type ItemInput = Partial<Pick<Item, "title" | "author" | "url" | "kind" | "status" | "rating" | "notes" | "finished_at">>;
+
+/** A checked request body: the item's columns to set, and its new tags when the body had `tags`. */
+type CheckedInput = { fields: ItemInput; tags?: string[] };
 
 const COLUMNS = "id, title, author, url, kind, status, rating, notes, created_at, updated_at, finished_at";
 
@@ -65,7 +69,7 @@ function optionalText(body: Record<string, unknown>, key: "author" | "url"): str
  * Checks a POST (`creating`) or PATCH body and returns only the fields it sets, cleaned (title trimmed, dates in UTC).
  * Unknown keys are ignored. Throws an InputError naming the first bad field.
  */
-function validateItemInput(body: unknown, creating: boolean): ItemInput {
+function validateItemInput(body: unknown, creating: boolean): CheckedInput {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
     throw new InputError("invalid_body", "The request body must be a JSON object.", 'Send an object such as {"title": "Dune"}.');
   }
@@ -132,7 +136,11 @@ function validateItemInput(body: unknown, creating: boolean): ItemInput {
       out.finished_at = parsed;
     }
   }
-  return out;
+
+  if (b.tags === undefined) return { fields: out };
+  const tags = normalizeTags(b.tags);
+  if (!Array.isArray(tags)) throw new InputError(tags.code, tags.message, tags.fix);
+  return { fields: out, tags };
 }
 
 /** The item's new finished_at: a given value wins; otherwise set on entering done, cleared on leaving it. */
@@ -156,7 +164,7 @@ async function readJson(req: Request): Promise<unknown> {
 }
 
 /** The /api/items routes on `db`. Returns null when the path is not an items route, so the caller can answer 404. */
-export function itemsRoutes(db: Database) {
+export function itemsRoutes(db: Database, tags: ReturnType<typeof tagStore>) {
   const getItem = db.query<Item, [number]>(`SELECT ${COLUMNS} FROM items WHERE id = ?`);
   const listItems = db.query<Item, []>(`SELECT ${COLUMNS} FROM items ORDER BY created_at DESC, id DESC`);
   const insertItem = db.query<Item, Record<string, string | number | null>>(
@@ -166,40 +174,63 @@ export function itemsRoutes(db: Database) {
   );
   const deleteItem = db.query<{ id: number }, [number]>("DELETE FROM items WHERE id = ? RETURNING id");
 
+  const withTags = (item: Item) => ({ ...item, tags: tags.of(item.id) });
+
+  // The item row and its tags are written in one transaction, so a failure leaves neither half behind.
+  const insert = db.transaction((input: CheckedInput, now: string): Item => {
+    const f = input.fields;
+    const item = insertItem.get({
+      $title: f.title!,
+      $author: f.author ?? null,
+      $url: f.url ?? null,
+      $kind: f.kind ?? "book",
+      $status: f.status ?? "to_read",
+      $rating: f.rating ?? null,
+      $notes: f.notes ?? "",
+      $now: now,
+      $finished_at: nextFinishedAt(f, null, now),
+    })!;
+    tags.replace(item.id, input.tags ?? []);
+    return item;
+  });
+
+  const patch = db.transaction((id: number, before: Item, input: CheckedInput, now: string): Item => {
+    const fields: Record<string, string | number | null> = {
+      ...input.fields,
+      updated_at: now,
+      finished_at: nextFinishedAt(input.fields, before, now),
+    };
+    // Column names come from the fixed set validateItemInput produces, never from the request; the values are bound.
+    const sets = Object.keys(fields).map((k) => `${k} = $${k}`);
+    const params = Object.fromEntries(Object.entries(fields).map(([k, v]) => [`$${k}`, v ?? null]));
+    const item = db
+      .query<Item, Record<string, string | number | null>>(`UPDATE items SET ${sets.join(", ")} WHERE id = $id RETURNING ${COLUMNS}`)
+      .get({ ...params, $id: id })!;
+    if (input.tags !== undefined) tags.replace(id, input.tags);
+    return item;
+  });
+
   const create = async (req: Request): Promise<Response> => {
     const input = validateItemInput(await readJson(req), true);
-    const now = new Date().toISOString();
-    const item = insertItem.get({
-      $title: input.title!,
-      $author: input.author ?? null,
-      $url: input.url ?? null,
-      $kind: input.kind ?? "book",
-      $status: input.status ?? "to_read",
-      $rating: input.rating ?? null,
-      $notes: input.notes ?? "",
-      $now: now,
-      $finished_at: nextFinishedAt(input, null, now),
-    });
-    return Response.json(item, { status: 201 });
+    return Response.json(withTags(insert(input, new Date().toISOString())), { status: 201 });
   };
 
   const update = async (req: Request, id: number, rawId: string): Promise<Response> => {
     const before = getItem.get(id);
     if (!before) return notFound(rawId);
     const input = validateItemInput(await readJson(req), false);
-    const now = new Date().toISOString();
-    const fields: Record<string, string | number | null> = { ...input, updated_at: now, finished_at: nextFinishedAt(input, before, now) };
-    // Column names come from the fixed list above, never from the request; the values are bound.
-    const sets = Object.keys(fields).map((k) => `${k} = $${k}`);
-    const params = Object.fromEntries(Object.entries(fields).map(([k, v]) => [`$${k}`, v ?? null]));
-    const item = db.query<Item, Record<string, string | number | null>>(`UPDATE items SET ${sets.join(", ")} WHERE id = $id RETURNING ${COLUMNS}`).get({ ...params, $id: id });
-    return Response.json(item);
+    return Response.json(withTags(patch(id, before, input, new Date().toISOString())));
+  };
+
+  const list = (): Response => {
+    const byItem = tags.byItem();
+    return Response.json(listItems.all().map((item) => ({ ...item, tags: byItem.get(item.id) ?? [] })));
   };
 
   return async (req: Request, pathname: string): Promise<Response | null> => {
     try {
       if (pathname === "/api/items") {
-        if (req.method === "GET") return Response.json(listItems.all());
+        if (req.method === "GET") return list();
         if (req.method === "POST") return await create(req);
         return null;
       }
@@ -211,8 +242,9 @@ export function itemsRoutes(db: Database) {
       if (Number.isNaN(id)) return notFound(rawId);
       if (req.method === "GET") {
         const item = getItem.get(id);
-        return item ? Response.json(item) : notFound(rawId);
+        return item ? Response.json(withTags(item)) : notFound(rawId);
       }
+      // The tags table cascades on delete (foreign_keys is on), so the item's tags go with it.
       if (req.method === "DELETE") return deleteItem.get(id) ? new Response(null, { status: 204 }) : notFound(rawId);
       return await update(req, id, rawId);
     } catch (e) {

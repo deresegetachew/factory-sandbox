@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { openDb } from "./db";
 import { apiError } from "./errors";
 import { itemsRoutes } from "./items";
+import { tagStore } from "./tags";
 
 export { apiError };
 
@@ -10,10 +11,12 @@ export type App = { fetch(req: Request): Response | Promise<Response>; db: Datab
 /** Builds the Shelf app on the database at `dbPath` (":memory:" for tests), without opening a port. */
 export function createApp(dbPath: string): App {
   const db = openDb(dbPath);
-  const items = itemsRoutes(db);
+  const tags = tagStore(db);
+  const items = itemsRoutes(db, tags);
   const fetch = async (req: Request): Promise<Response> => {
     const { pathname } = new URL(req.url);
     if (req.method === "GET" && pathname === "/api/health") return Response.json({ ok: true });
+    if (req.method === "GET" && pathname === "/api/tags") return Response.json(tags.counts());
     const answer = await items(req, pathname);
     if (answer) return answer;
     return apiError(
