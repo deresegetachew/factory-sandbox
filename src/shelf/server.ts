@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { openDb } from "./db";
 import { apiError } from "./errors";
 import { exportRoute } from "./export";
+import { allowedHosts, guardApi } from "./guard";
 import { itemsRoutes } from "./items";
 import { serveStatic } from "./static";
 import { statsQueries } from "./stats";
@@ -11,8 +12,14 @@ export { apiError };
 
 export type App = { fetch(req: Request): Response | Promise<Response>; db: Database };
 
+export type AppOptions = {
+  /** The Host values ("host:port") the API answers to; see guard.ts. Defaults to 127.0.0.1 and localhost on port 3000. */
+  hosts?: string[];
+};
+
 /** Builds the Shelf app on the database at `dbPath` (":memory:" for tests), without opening a port. */
-export function createApp(dbPath: string): App {
+export function createApp(dbPath: string, options: AppOptions = {}): App {
+  const hosts = options.hosts ?? allowedHosts(3000);
   const db = openDb(dbPath);
   const tags = tagStore(db);
   const items = itemsRoutes(db, tags);
@@ -20,6 +27,8 @@ export function createApp(dbPath: string): App {
   const exportItems = exportRoute(db, tags);
   const fetch = async (req: Request): Promise<Response> => {
     const { pathname } = new URL(req.url);
+    const refused = guardApi(req, pathname, hosts);
+    if (refused) return refused;
     if (req.method === "GET" && pathname === "/api/health") return Response.json({ ok: true });
     if (req.method === "GET" && pathname === "/api/tags") return Response.json(tags.counts());
     if (req.method === "GET" && pathname === "/api/stats") return Response.json(stats());
@@ -49,7 +58,9 @@ export function serverOptions(env: Record<string, string | undefined>): {
 
 if (import.meta.main) {
   const { hostname, port, dbPath } = serverOptions(process.env);
-  const app = createApp(dbPath);
-  const server = Bun.serve({ hostname, port, fetch: app.fetch });
+  // The app needs the port actually bound (PORT=0 picks one), so it is built once the server is listening.
+  let app: App | undefined;
+  const server = Bun.serve({ hostname, port, fetch: (req) => app!.fetch(req) });
+  app = createApp(dbPath, { hosts: allowedHosts(server.port!, hostname) });
   console.log(`Shelf on http://${server.hostname}:${server.port} (database: ${dbPath})`);
 }
