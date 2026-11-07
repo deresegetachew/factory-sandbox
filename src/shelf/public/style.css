@@ -239,3 +239,37 @@ table.stats td {
 .reading-item .error {
   flex-basis: 100%;
 }
+
+.goal {
+  margin-bottom: 1rem;
+}
+
+.goal p {
+  margin: 0 0 0.25rem;
+  font-weight: 600;
+}
+
+.goal progress {
+  display: block;
+  width: 100%;
+  height: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.goal .buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.goal-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.goal-form input {
+  width: 7rem;
+}

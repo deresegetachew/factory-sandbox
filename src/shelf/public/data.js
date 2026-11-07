@@ -55,3 +55,35 @@ export function importSummary(result) {
 export function exportPath(format) {
   return `/api/export?format=${format}`;
 }
+
+/** The goal limits the API checks (src/shelf/goals.ts MIN_GOAL_BOOKS and MAX_GOAL_BOOKS); the page checks first. */
+export const MIN_GOAL_BOOKS = 1;
+export const MAX_GOAL_BOOKS = 1000;
+
+/**
+ * What the stats section shows for `year` from GET /api/stats' `goal`: the set-a-goal control when there is none for
+ * that year, else "<done> of <books> books in <year>" with a bar that is full (never over) once the goal is passed.
+ */
+export function goalView(goal, year) {
+  if (!goal || goal.year !== year) return { mode: "set", year, label: `Set a goal for ${year}` };
+  const { books, done } = goal;
+  return {
+    mode: "progress",
+    year,
+    books,
+    done,
+    text: `${done} of ${books} books in ${year}`,
+    value: Math.min(done, books),
+    max: books,
+    percent: Math.min(100, Math.round((done / books) * 100)),
+  };
+}
+
+/** The goal field's text as { books } when the API would take it, else { problem } (nothing is sent then). */
+export function goalBooks(text) {
+  const trimmed = String(text ?? "").trim();
+  const books = /^\d+$/.test(trimmed) ? Number(trimmed) : NaN;
+  if (Number.isInteger(books) && books >= MIN_GOAL_BOOKS && books <= MAX_GOAL_BOOKS) return { books };
+  const got = trimmed === "" ? "The goal is empty." : `"${trimmed}" is not a goal Shelf can save.`;
+  return { problem: `${got} Enter a whole number from ${MIN_GOAL_BOOKS} to ${MAX_GOAL_BOOKS}, such as 24.` };
+}

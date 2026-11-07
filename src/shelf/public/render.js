@@ -1,5 +1,6 @@
 // Builds the shelf's list from items, using only createElement, append, setAttribute, textContent,
 // addEventListener and plain properties. User text is always set as text, never parsed as HTML.
+import { goalBooks, MAX_GOAL_BOOKS, MIN_GOAL_BOOKS } from "./data.js";
 
 export const STATUS_LABELS = { to_read: "To read", reading: "Reading", done: "Done" };
 export const KIND_LABELS = { book: "Book", article: "Article" };
@@ -301,4 +302,71 @@ export function renderReadingStrip(doc, items, onFinished) {
     li.append(button, error);
     return li;
   });
+}
+
+/**
+ * The reading goal in the stats section, from goalView(): a form to set it, or the progress line and bar with Change
+ * (shows the form, filled in) and Remove. actions.onSave(books) and actions.onRemove() resolve to an error text or
+ * null; the page reloads the stats when they work. A field goalBooks() refuses shows its problem and sends nothing.
+ */
+export function renderGoal(doc, view, actions = {}) {
+  const box = h(doc, "div", { class: "goal", "data-goal": view.mode });
+
+  const error = h(doc, "div", { class: "error", role: "alert" });
+  error.hidden = true;
+  const showError = (message) => {
+    error.textContent = message ?? "";
+    error.hidden = !message;
+  };
+
+  const field = h(doc, "input", { name: "books", type: "number", min: MIN_GOAL_BOOKS, max: MAX_GOAL_BOOKS, step: 1, inputmode: "numeric" });
+  field.value = view.mode === "progress" ? String(view.books) : "";
+  const save = h(doc, "button", { type: "submit" });
+  save.textContent = "Save";
+  const label = view.mode === "set" ? view.label : `Books to finish in ${view.year}`;
+  // novalidate: goalBooks() checks the field and says what to fix, the same way in every browser.
+  const form = h(doc, "form", { class: "goal-form", "data-goal": "form", novalidate: "" }, labelled(doc, label, field), save);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (save.disabled) return;
+    const { books, problem } = goalBooks(field.value);
+    if (problem) return showError(problem);
+    showError("");
+    save.disabled = true;
+    const failed = await actions.onSave?.(books);
+    save.disabled = false;
+    showError(failed);
+  });
+
+  if (view.mode === "set") {
+    box.append(form, error);
+    return box;
+  }
+
+  const text = h(doc, "p", { "data-goal": "text" });
+  text.textContent = view.text;
+  const bar = h(doc, "progress", { value: view.value, max: view.max, "aria-label": `Reading goal for ${view.year}`, "aria-valuetext": view.text });
+  bar.max = view.max;
+  bar.value = view.value;
+
+  const change = h(doc, "button", { type: "button", class: "secondary", "aria-expanded": "false" });
+  change.textContent = "Change";
+  form.hidden = true;
+  change.addEventListener("click", () => {
+    form.hidden = !form.hidden;
+    change.setAttribute("aria-expanded", String(!form.hidden));
+    if (!form.hidden) field.focus?.();
+  });
+  const remove = h(doc, "button", { type: "button", class: "danger" });
+  remove.textContent = "Remove";
+  remove.addEventListener("click", async () => {
+    if (remove.disabled) return;
+    remove.disabled = true;
+    const failed = await actions.onRemove?.();
+    remove.disabled = false;
+    showError(failed);
+  });
+
+  box.append(text, bar, h(doc, "div", { class: "buttons" }, change, remove), form, error);
+  return box;
 }
