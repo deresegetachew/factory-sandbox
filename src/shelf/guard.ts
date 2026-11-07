@@ -20,7 +20,10 @@ const BODY_METHODS = new Set(["POST", "PATCH", "PUT"]);
  * Body types a route accepts besides JSON, by path. Only routes listed here may take another type; every other
  * write takes application/json alone. The import task (b17) adds "/api/import" here if it accepts text/csv.
  */
-export const EXTRA_BODY_TYPES: Record<string, string[]> = {};
+export const EXTRA_BODY_TYPES: Record<string, string[]> = {
+  // Import takes the CSV file as it is (b17); its JSON form is already accepted.
+  "/api/import": ["text/csv"],
+};
 
 /** The media type of a Content-Type header, lowercased, without parameters ("application/json; charset=utf-8" -> "application/json"). */
 function mediaType(contentType: string | null): string {

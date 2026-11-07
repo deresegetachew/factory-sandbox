@@ -18,9 +18,17 @@ export function writeCsv(rows: string[][]): string {
 /**
  * CSV text to rows. Rows may end with CRLF or LF, and the last line break is optional. Quoted fields may hold
  * commas, doubled quotes and line breaks (kept exactly). Throws an Error naming the line for an unclosed quote or
- * a quote inside an unquoted field.
+ * a quote inside an unquoted field. An empty line is a row with one empty field [""].
  */
 export function parseCsv(text: string): string[][] {
+  return parseCsvRecords(text).map((row) => (row.length === 0 ? [""] : row));
+}
+
+/**
+ * Like parseCsv, but a truly empty line comes back as [] so it can be told apart from a line holding one empty
+ * or quoted-empty field ("" or a space), which is [""] or [" "]. The import skips only the empty lines.
+ */
+export function parseCsvRecords(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
@@ -34,9 +42,14 @@ export function parseCsv(text: string): string[][] {
     field = "";
   };
   const endRow = () => {
-    endField();
-    rows.push(row);
+    if (rowStarted) {
+      endField();
+      rows.push(row);
+    } else {
+      rows.push([]);
+    }
     row = [];
+    field = "";
     rowStarted = false;
   };
 

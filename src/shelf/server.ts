@@ -3,6 +3,7 @@ import { openDb } from "./db";
 import { apiError } from "./errors";
 import { exportRoute } from "./export";
 import { allowedHosts, guardApi } from "./guard";
+import { importRoute } from "./import";
 import { itemsRoutes } from "./items";
 import { serveStatic } from "./static";
 import { statsQueries } from "./stats";
@@ -11,6 +12,9 @@ import { tagStore } from "./tags";
 export { apiError };
 
 export type App = { fetch(req: Request): Response | Promise<Response>; db: Database };
+
+/** The largest request body the server accepts (an import file is the only large one). */
+export const MAX_BODY_BYTES = 20 * 1024 * 1024;
 
 export type AppOptions = {
   /** The Host values ("host:port") the API answers to; see guard.ts. Defaults to 127.0.0.1 and localhost on port 3000. */
@@ -25,6 +29,7 @@ export function createApp(dbPath: string, options: AppOptions = {}): App {
   const items = itemsRoutes(db, tags);
   const stats = statsQueries(db);
   const exportItems = exportRoute(db, tags);
+  const importItems = importRoute(db, tags);
   const fetch = async (req: Request): Promise<Response> => {
     const { pathname } = new URL(req.url);
     const refused = guardApi(req, pathname, hosts);
@@ -33,6 +38,7 @@ export function createApp(dbPath: string, options: AppOptions = {}): App {
     if (req.method === "GET" && pathname === "/api/tags") return Response.json(tags.counts());
     if (req.method === "GET" && pathname === "/api/stats") return Response.json(stats());
     if (req.method === "GET" && pathname === "/api/export") return exportItems(req);
+    if (req.method === "POST" && pathname === "/api/import") return importItems(req);
     const answer = (await items(req, pathname)) ?? serveStatic(req.method, pathname);
     if (answer) return answer;
     return apiError(
@@ -60,7 +66,8 @@ if (import.meta.main) {
   const { hostname, port, dbPath } = serverOptions(process.env);
   // The app needs the port actually bound (PORT=0 picks one), so it is built once the server is listening.
   let app: App | undefined;
-  const server = Bun.serve({ hostname, port, fetch: (req) => app!.fetch(req) });
+  // 20 MB is far above any real shelf export; Bun's 128 MB default would let one import use gigabytes.
+  const server = Bun.serve({ hostname, port, maxRequestBodySize: MAX_BODY_BYTES, fetch: (req) => app!.fetch(req) });
   app = createApp(dbPath, { hosts: allowedHosts(server.port!, hostname) });
   console.log(`Shelf on http://${server.hostname}:${server.port} (database: ${dbPath})`);
 }
