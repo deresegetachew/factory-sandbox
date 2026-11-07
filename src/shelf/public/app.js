@@ -17,7 +17,9 @@ async function api(method, path, body) {
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     const err = data && data.error;
-    throw new Error(err ? `${err.message} ${err.fix}` : `The server answered ${res.status}.`);
+    throw new Error(
+      err ? `${err.message} ${err.fix}` : `The server answered ${res.status}. Reload the page and try again; if it keeps happening, restart Shelf.`,
+    );
   }
   return data;
 }
@@ -49,21 +51,23 @@ const actions = {
   },
 };
 
+/** A status or rating change; resolves to the error text for the item to show, or null when it worked. */
 async function change(id, fields) {
   try {
     await api("PATCH", `/api/items/${id}`, fields);
-    show(message, "");
-    await load();
   } catch (e) {
-    show(message, e.message);
-    await load();
+    return e.message;
   }
+  await load();
+  return null;
 }
 
+/** Reloads the list; a successful load also clears the error shown above it. */
 async function load() {
   try {
     const items = await api("GET", "/api/items");
     list.replaceChildren(...renderList(document, items, actions));
+    show(message, "");
   } catch (e) {
     show(message, e.message);
   }

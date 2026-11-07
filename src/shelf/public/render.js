@@ -64,8 +64,8 @@ const ratingChoices = [["", "None"], ["1", "1"], ["2", "2"], ["3", "3"], ["4", "
 
 /**
  * One item as an <li>: its fields (marked with data-field), quick controls for status and rating, and an edit form
- * that is hidden until Edit is pressed. `actions` callbacks: onStatus(id, status), onRating(id, rating|null),
- * onDelete(id, item), onSave(id, fields, showError).
+ * that is hidden until Edit is pressed. `actions` callbacks: onStatus(id, status) and onRating(id, rating|null)
+ * resolve to an error text or null; onDelete(id, item); onSave(id, fields, showError).
  */
 export function renderItem(doc, item, actions = {}) {
   const href = safeHref(item.url);
@@ -86,13 +86,10 @@ export function renderItem(doc, item, actions = {}) {
   kind.textContent = item.kind;
   li.append(kind);
 
-  if (item.tags && item.tags.length) {
-    const tags = h(doc, "span", { "data-field": "tags", class: "tags" });
-    tags.textContent = item.tags.join(", ");
-    li.append(tags);
-  } else {
-    li.append(h(doc, "span", { "data-field": "tags", class: "tags" }));
-  }
+  const tags = h(doc, "span", { "data-field": "tags", class: "tags" });
+  tags.textContent = (item.tags ?? []).join(", ");
+  tags.hidden = !item.tags || item.tags.length === 0;
+  li.append(tags);
 
   if (item.notes) {
     const notes = h(doc, "p", { "data-field": "notes", class: "notes" });
@@ -100,22 +97,34 @@ export function renderItem(doc, item, actions = {}) {
     li.append(notes);
   }
 
-  const status = select(doc, "status", statusChoices, item.status);
-  status.setAttribute("data-field", "status");
-  status.addEventListener("change", () => actions.onStatus?.(item.id, status.value));
-
-  const rating = select(doc, "rating", ratingChoices, item.rating == null ? "" : String(item.rating));
-  rating.setAttribute("data-field", "rating");
-  rating.addEventListener("change", () => actions.onRating?.(item.id, rating.value === "" ? null : Number(rating.value)));
-
-  li.append(h(doc, "div", { class: "controls" }, labelled(doc, "Status", status), labelled(doc, "Rating", rating)));
-
   const error = h(doc, "div", { class: "error", role: "alert" });
   error.hidden = true;
   const showError = (message) => {
     error.textContent = message ?? "";
     error.hidden = !message;
   };
+
+  // A quick change that the API refuses puts the control back and shows the message and fix on this item.
+  const quickChange = (control, previous, send) => {
+    control.addEventListener("change", async () => {
+      const problem = await send(control.value);
+      if (problem) {
+        control.value = previous;
+        showError(problem);
+      }
+    });
+  };
+
+  const status = select(doc, "status", statusChoices, item.status);
+  status.setAttribute("data-field", "status");
+  quickChange(status, item.status, (value) => actions.onStatus?.(item.id, value));
+
+  const ratingValue = item.rating == null ? "" : String(item.rating);
+  const rating = select(doc, "rating", ratingChoices, ratingValue);
+  rating.setAttribute("data-field", "rating");
+  quickChange(rating, ratingValue, (value) => actions.onRating?.(item.id, value === "" ? null : Number(value)));
+
+  li.append(h(doc, "div", { class: "controls" }, labelled(doc, "Status", status), labelled(doc, "Rating", rating)));
 
   const form = editForm(doc, item, actions, showError);
   form.hidden = true;
