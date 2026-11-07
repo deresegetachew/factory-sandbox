@@ -25,11 +25,11 @@ export type Item = {
 type ItemInput = Partial<Pick<Item, "title" | "author" | "url" | "kind" | "status" | "rating" | "notes" | "finished_at">>;
 
 /** A checked request body: the item's columns to set, and its new tags when the body had `tags`. */
-type CheckedInput = { fields: ItemInput; tags?: string[] };
+export type CheckedInput = { fields: ItemInput; tags?: string[] };
 
 const COLUMNS = "id, title, author, url, kind, status, rating, notes, created_at, updated_at, finished_at";
 
-class InputError extends Error {
+export class InputError extends Error {
   constructor(
     readonly code: string,
     message: string,
@@ -71,7 +71,7 @@ function optionalText(body: Record<string, unknown>, key: "author" | "url"): str
  * Checks a POST (`creating`) or PATCH body and returns only the fields it sets, cleaned (title trimmed, dates in UTC).
  * Unknown keys are ignored. Throws an InputError naming the first bad field.
  */
-function validateItemInput(body: unknown, creating: boolean): CheckedInput {
+export function validateItemInput(body: unknown, creating: boolean): CheckedInput {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
     throw new InputError("invalid_body", "The request body must be a JSON object.", 'Send an object such as {"title": "Dune"}.');
   }
@@ -146,7 +146,7 @@ function validateItemInput(body: unknown, creating: boolean): CheckedInput {
 }
 
 /** The item's new finished_at: a given value wins; otherwise set on entering done, cleared on leaving it. */
-function nextFinishedAt(input: ItemInput, before: Pick<Item, "status" | "finished_at"> | null, now: string): string | null {
+export function nextFinishedAt(input: ItemInput, before: Pick<Item, "status" | "finished_at"> | null, now: string): string | null {
   const status = input.status ?? before?.status ?? "to_read";
   if (input.finished_at !== undefined) return input.finished_at;
   if (status !== "done") return null;

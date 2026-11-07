@@ -3,6 +3,7 @@ import { openDb } from "./db";
 import { apiError } from "./errors";
 import { exportRoute } from "./export";
 import { allowedHosts, guardApi } from "./guard";
+import { importRoute } from "./import";
 import { itemsRoutes } from "./items";
 import { serveStatic } from "./static";
 import { statsQueries } from "./stats";
@@ -25,6 +26,7 @@ export function createApp(dbPath: string, options: AppOptions = {}): App {
   const items = itemsRoutes(db, tags);
   const stats = statsQueries(db);
   const exportItems = exportRoute(db, tags);
+  const importItems = importRoute(db, tags);
   const fetch = async (req: Request): Promise<Response> => {
     const { pathname } = new URL(req.url);
     const refused = guardApi(req, pathname, hosts);
@@ -33,6 +35,7 @@ export function createApp(dbPath: string, options: AppOptions = {}): App {
     if (req.method === "GET" && pathname === "/api/tags") return Response.json(tags.counts());
     if (req.method === "GET" && pathname === "/api/stats") return Response.json(stats());
     if (req.method === "GET" && pathname === "/api/export") return exportItems(req);
+    if (req.method === "POST" && pathname === "/api/import") return importItems(req);
     const answer = (await items(req, pathname)) ?? serveStatic(req.method, pathname);
     if (answer) return answer;
     return apiError(
