@@ -85,7 +85,7 @@
     ".claude/ci/install-tools.sh": "b1601d21570954400339a4220f5d251171f5025df382461a483a41ca75be0d15",
     ".claude/ci/loop.sh": "ea5df55b2b6f97133b0e16f22b35b4997673ca4e33996228a49c936c9fc940f8",
     ".claude/ci/runner.Dockerfile": "a674f8cb5ed0b411db933c4422c3ee4785549e158306bf6af462ce1e17df4ced",
-    ".claude/factory/settings.json": "7a84a0b81d0e72620e620375660c484172c2e26754c57f0169cce04eac3d1209",
+    ".claude/factory/settings.json": "d292c0d18895ca9fc9170016790ba3916f901153d23f350e4a083c2fdc2ff39b",
     ".claude/hooks/check.ts": "72e517edee7e730834ec58e9172be88507ec66e10310fd38d895c77a7f7c4653",
     ".claude/hooks/core/adapters/board/agents.ts": "154788efff69c4b63c5ade80fe3dbd81cb07d24da3380889a9ed185291733c8f",
     ".claude/hooks/core/adapters/board/bus.ts": "93e4ee07d117fe5ccf9cf3a927aa11316d192dcc430eca4312cb912bc66b5c58",
