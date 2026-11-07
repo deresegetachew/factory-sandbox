@@ -261,3 +261,44 @@ export function renderImportResult(doc, summary) {
   }
   return box;
 }
+
+/**
+ * The "Currently reading" strip: one <li> per reading item (title, author when set, a Finished button), or [] when
+ * nothing is being read (the page then hides the strip). onFinished(id) resolves to an error text or null; while it
+ * runs the button is disabled, so a double click sends one request. On null the entry leaves the strip; on an error
+ * it stays and shows the message.
+ */
+export function renderReadingStrip(doc, items, onFinished) {
+  return items.map((item) => {
+    const title = h(doc, "span", { "data-field": "title", class: "title" });
+    title.textContent = item.title;
+    const li = h(doc, "li", { class: "reading-item", "data-id": item.id }, title);
+
+    if (item.author) {
+      const author = h(doc, "span", { "data-field": "author", class: "author" });
+      author.textContent = item.author;
+      li.append(author);
+    }
+
+    const error = h(doc, "div", { class: "error", role: "alert" });
+    error.hidden = true;
+
+    const button = h(doc, "button", { type: "button", "aria-label": `Finished: ${item.title}` });
+    button.textContent = "Finished";
+    button.addEventListener("click", async () => {
+      if (button.disabled) return;
+      button.disabled = true;
+      const problem = await onFinished?.(item.id);
+      if (problem) {
+        button.disabled = false;
+        error.textContent = problem;
+        error.hidden = false;
+        return;
+      }
+      li.remove();
+    });
+
+    li.append(button, error);
+    return li;
+  });
+}
