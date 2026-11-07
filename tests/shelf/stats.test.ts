@@ -39,6 +39,7 @@ describe("GET /api/stats", () => {
       byMonth: [],
       byTag: [],
       totals: { to_read: 0, reading: 0, done: 0 },
+      goal: null,
     });
   });
 
@@ -65,6 +66,7 @@ describe("GET /api/stats", () => {
         { tag: "c", total: 2, done: 1 },
       ],
       totals: { to_read: 2, reading: 1, done: 5 },
+      goal: null,
     });
   });
 
@@ -126,6 +128,7 @@ describe("GET /api/stats", () => {
       byMonth: [{ month: "2024-03", done: 1 }],
       byTag: [],
       totals: { to_read: 0, reading: 0, done: 1 },
+      goal: null,
     });
   });
 
@@ -147,6 +150,7 @@ describe("GET /api/stats", () => {
       byMonth: [{ month: "2024-05", done: 1 }],
       byTag: [{ tag: "x", total: 2, done: 1 }],
       totals: { to_read: 0, reading: 1, done: 1 },
+      goal: null,
     });
   });
 
@@ -164,6 +168,7 @@ describe("GET /api/stats", () => {
       byMonth: [],
       byTag: [],
       totals: { to_read: 0, reading: 0, done: 0 },
+      goal: null,
     });
   });
 
