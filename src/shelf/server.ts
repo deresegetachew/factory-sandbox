@@ -3,6 +3,7 @@ import { openDb } from "./db";
 import { apiError } from "./errors";
 import { itemsRoutes } from "./items";
 import { serveStatic } from "./static";
+import { statsQueries } from "./stats";
 import { tagStore } from "./tags";
 
 export { apiError };
@@ -14,10 +15,12 @@ export function createApp(dbPath: string): App {
   const db = openDb(dbPath);
   const tags = tagStore(db);
   const items = itemsRoutes(db, tags);
+  const stats = statsQueries(db);
   const fetch = async (req: Request): Promise<Response> => {
     const { pathname } = new URL(req.url);
     if (req.method === "GET" && pathname === "/api/health") return Response.json({ ok: true });
     if (req.method === "GET" && pathname === "/api/tags") return Response.json(tags.counts());
+    if (req.method === "GET" && pathname === "/api/stats") return Response.json(stats());
     const answer = (await items(req, pathname)) ?? serveStatic(req.method, pathname);
     if (answer) return answer;
     return apiError(
