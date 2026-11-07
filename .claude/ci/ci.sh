@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# factory ci: the project's CI, on GitHub's runners or on a self-hosted runner on this machine (README.md, "CI").
+# factory ci: the project's CI, on GitHub's runners or on a self-hosted runner on this machine (docs/wiki/ci.md, "CI").
 #
-#   factory ci status              where CI runs (local or github), the latest runs, and the local runner
+#   factory ci status [--json]     where CI runs (local or github), the latest runs, and the local runner (--json: as data)
 #   factory ci use local|github    sends CI jobs to the self-hosted runners, or back to GitHub's
 #   factory ci install             installs the runners: ci.runners heavy ones and the light lane, each a LaunchAgent
 #                                  (macOS) or a systemd --user service (Linux); run it again to update or rescale
@@ -10,7 +10,7 @@
 #   factory ci logs [i] [-f]       a runner's log (instance 1 unless you name one)
 #   factory ci stale | check       are the installed runner copies older than this checkout / fit to start (factory update runs both)
 #
-# Every name comes from the project (ci_names.py): the runner is `<repo>-ci`, its jobs ask for the label
+# Every name comes from the project (ci_names.ts): the runner is `<repo>-ci`, its jobs ask for the label
 # `<repo>-local`, unless "ci" in .claude/factory.json says otherwise. Several machines can run runners with the
 # same label; GitHub gives each job to one of them.
 set -euo pipefail
@@ -24,9 +24,15 @@ export FACTORY_CI_PLATFORM="$platform"
 if [ "$platform" = linux ]; then machine="this machine"; manager=systemd; else machine="this Mac"; manager=launchd; fi
 
 kit="$(cd "$(dirname "$0")" && pwd)"
+# Run a factory script (<path>.ts) with Bun. --no-env-file: Bun must not load the project's .env into the factory.
+fh() {
+  local s="$1"; shift
+  command -v bun >/dev/null 2>&1 || { printf '{"code": "bun_missing", "message": "%s needs Bun, and bun is not on the PATH.", "fix": "Install Bun (curl -fsSL https://bun.sh/install | bash), open a new terminal, then run the command again."}\n' "${s##*/}.ts" >&2; return 127; }
+  bun --no-env-file --config=/dev/null "$s.ts" "$@"
+}
 root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$root"
-eval "$(python3 "$kit/ci_names.py")"
+eval "$(fh "$kit/ci_names")"
 domain="gui/$(id -u)"
 exe="$CI_INSTALLED/$CI_NAME"
 # Which machine a runner is on, in its name (<name>-<host>-<epoch>), so `stop` removes only this machine's.
@@ -40,6 +46,16 @@ compose=(docker compose --file "$kit/compose.yaml" --project-name "$CI_NAME")
 # Docker, label <repo>-light, for the Factory guard. Instance 1 keeps the single runner's names, so an existing
 # install carries on; instance N adds "-N" and the light lane "-light" to them.
 wanted_ids() { seq 1 "$CI_RUNNERS"; [ "$CI_LIGHT" = 1 ] && echo light; return 0; }
+# Where CI_RUNNERS came from (#282): FACTORY_CI_RUNNERS, this machine's saved count (`factory ci runners <n>`), the
+# project's ci.runners, or the default.
+runners_from() {
+  case "$CI_RUNNERS_FROM" in
+    env) echo "FACTORY_CI_RUNNERS" ;;
+    machine) echo "this machine's setting" ;;
+    project) echo "ci.runners in .claude/factory.json" ;;
+    *) echo "the default" ;;
+  esac
+}
 valid_id() { case "$1" in light|[1-9]|1[0-6]) return 0 ;; esac; return 1; }
 use_instance() {
   local sfx=""
@@ -62,29 +78,26 @@ use_instance() {
 # The versions runner.Dockerfile bakes in, from this checkout: Node from .nvmrc, pnpm from package.json's
 # packageManager, Playwright from node_modules or the lockfile. Prints three lines (each may be empty).
 tool_versions() {
-  python3 - <<'PY'
-import json, os, re
-node = ""
-if os.path.exists(".nvmrc"):
-    v = open(".nvmrc").read().strip()
-    node = v if re.fullmatch(r"v?\d+(\.\d+){0,2}", v) else ""
-pnpm = ""
-try:
-    m = re.fullmatch(r"pnpm@(\d+\.\d+\.\d+)(\+.*)?", json.load(open("package.json")).get("packageManager", ""))
-    pnpm = m.group(1) if m else ""
-except (OSError, ValueError):
-    pass
-pw = ""
-try:
-    pw = json.load(open("node_modules/@playwright/test/package.json"))["version"]
-except (OSError, ValueError, KeyError):
-    try:
-        m = re.search(r"@playwright/test@(\d+\.\d+\.\d+)", open("pnpm-lock.yaml").read())
-        pw = m.group(1) if m else ""
-    except OSError:
-        pass
-print(node); print(pnpm); print(pw)
-PY
+  bun --no-env-file --config=/dev/null -e "$(cat <<'TS'
+import { readFileSync } from "node:fs";
+const read = (f: string): string | null => { try { return readFileSync(f, "utf8"); } catch { return null; } };
+const json = (f: string): unknown => { const t = read(f); if (t === null) return null; try { return JSON.parse(t); } catch { return null; } };
+const field = (v: unknown, k: string): unknown => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>)[k] : undefined);
+let node = "";
+const nvmrc = read(".nvmrc");
+if (nvmrc !== null) { const v = nvmrc.trim(); node = /^v?\d+(\.\d+){0,2}$/.test(v) ? v : ""; }
+const pm = field(json("package.json"), "packageManager");
+const m = typeof pm === "string" ? /^pnpm@(\d+\.\d+\.\d+)(\+.*)?$/.exec(pm) : null;
+const pnpm = m ? m[1] : "";
+let pw = field(json("node_modules/@playwright/test/package.json"), "version");
+if (typeof pw !== "string") {
+  const lock = read("pnpm-lock.yaml");
+  const l = lock === null ? null : /@playwright\/test@(\d+\.\d+\.\d+)/.exec(lock);
+  pw = l ? l[1] : "";
+}
+console.log(node); console.log(pnpm); console.log(pw);
+TS
+)"
 }
 
 # The image is built from the checkout at install time. When main has moved Node, pnpm or Playwright since, say so.
@@ -484,7 +497,7 @@ free_mb() {
     END { if (size) print int(n * size / 1048576) }'
 }
 
-# A rough budget per runner (README.md, "How many runners"): a heavy job with its dind and service containers,
+# A rough budget per runner (docs/wiki/ci.md, "How many runners"): a heavy job with its dind and service containers,
 # and the light runner's 1 GB limit.
 HEAVY_MB=4096
 LIGHT_MB=1024
@@ -509,7 +522,7 @@ memory_note() {
   fi
   if [ "$need" -gt "$free" ]; then
     echo "Warning: $CI_RUNNERS heavy runner(s)$([ "$CI_LIGHT" = 1 ] && echo " and the light one") need about $need MB at once,"
-    echo "  and $where. Jobs may slow down or fail; lower ci.runners (or FACTORY_CI_RUNNERS)."
+    echo "  and $where. Jobs may slow down or fail; lower the count for this machine with \`factory ci runners <n>\`."
   fi
 }
 
@@ -564,6 +577,19 @@ remove_instance() {
   echo "Removed instance $1 ($I_NAME)."
 }
 
+# FACTORY_CI_NO_SCALE_DOWN=1 (what `factory update` sets, #282): keep every heavy runner this machine has installed,
+# even when the count here is lower. Only a person scales a machine down (`factory ci runners <n>` or `factory ci install`).
+keep_installed_runners() {
+  [ -n "${FACTORY_CI_NO_SCALE_DOWN:-}" ] || return 0
+  local id top=0
+  for id in $(installed_ids); do
+    case "$id" in light) ;; *) [ "$id" -gt "$top" ] && top="$id" ;; esac
+  done
+  [ "$top" -gt "$CI_RUNNERS" ] || return 0
+  echo "Kept $top heavy runner(s) installed here; $(runners_from) asks for $CI_RUNNERS. \`factory ci runners $CI_RUNNERS\` scales this machine down."
+  CI_RUNNERS="$top"
+}
+
 cmd_install() {
   if [ "$platform" = linux ]; then need gh docker systemctl; need_user_manager
   else need gh docker launchctl plutil; fi
@@ -593,6 +619,7 @@ cmd_install() {
     done
   fi
   build_image
+  keep_installed_runners
   memory_note
   # Scale down first: instances this machine has but no longer wants.
   local id wanted
@@ -802,18 +829,46 @@ cmd_use() {
   esac
 }
 
+# A {code, message, fix} error on stderr, exit 1 (what --json callers and a bad argument get).
+json_die() {
+  bun --no-env-file --config=/dev/null -e 'const [code, message, fix] = process.argv.slice(-3);
+console.error(JSON.stringify({ code, message, fix }));' "$1" "$2" "$3"
+  exit 1
+}
+
 cmd_status() {
-  need gh
-  if [ "$platform" = linux ]; then need systemctl; need_user_manager; fi
-  local value rc=0 local_mode=""
+  # --json (#304): the same facts as data for `factory snapshot` and the web UI; the text below is unchanged without it.
+  local json=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) json=1 ;;
+      *) json_die bad_args "factory ci status doesn't know the argument '$1'." \
+           "Run \`factory ci status\` for text, or \`factory ci status --json\` for data." ;;
+    esac
+    shift
+  done
+  if [ -n "$json" ]; then
+    command -v gh >/dev/null || json_die missing_tool "gh isn't installed or isn't on your PATH." \
+      "Install GitHub's gh CLI, run \`gh auth login\`, then \`factory ci status --json\` again."
+    if [ "$platform" = linux ] && ! { command -v systemctl >/dev/null && systemctl --user show-environment >/dev/null 2>&1; }; then
+      json_die no_user_manager "systemd's user manager for $(id -un) isn't reachable, so the runner services can't be read." \
+        "Log in as $(id -un) directly, or run \`sudo loginctl enable-linger $(id -un)\` and \`export XDG_RUNTIME_DIR=/run/user/$(id -u)\`, then try again."
+    fi
+  else
+    need gh
+    if [ "$platform" = linux ]; then need systemctl; need_user_manager; fi
+  fi
+  # say: a text line, printed only without --json.
+  say() { [ -n "$json" ] || echo "$@"; }
+  local value rc=0 local_mode="" mode=unknown
   value="$(runs_on)" || rc=$?
   case "$rc" in
-    0) echo "Mode: local (CI_RUNS_ON is $value)"; local_mode=1
-       case "$value" in *"\"$CI_LABEL\""*) ;; *) echo "  Note: that doesn't ask for this project's label $CI_LABEL." ;; esac ;;
-    1) echo "Mode: github (CI_RUNS_ON isn't set, so CI runs on GitHub's runners)" ;;
-    *) echo "Mode: unknown (gh can't read the repository variable CI_RUNS_ON; it needs admin on $CI_REPO)" ;;
+    0) say "Mode: local (CI_RUNS_ON is $value)"; local_mode=1; mode=local
+       case "$value" in *"\"$CI_LABEL\""*) ;; *) say "  Note: that doesn't ask for this project's label $CI_LABEL." ;; esac ;;
+    1) say "Mode: github (CI_RUNS_ON isn't set, so CI runs on GitHub's runners)"; mode=github ;;
+    *) say "Mode: unknown (gh can't read the repository variable CI_RUNS_ON; it needs admin on $CI_REPO)" ;;
   esac
-  local installed="" id
+  local installed="" id docker="" instances=()
   [ -n "$(installed_ids)" ] && installed=1
   if [ -n "$local_mode" ] || [ -n "$installed" ] || [ -n "$(hand_pid || true)" ]; then
     local pid
@@ -824,9 +879,11 @@ cmd_status() {
       if instance_loaded "$id" && [ "$platform" = linux ]; then
         pid="$(systemctl --user show "$I_UNIT" -p MainPID --value 2>/dev/null || true)"
         if [ -n "$pid" ] && [ "$pid" != 0 ]; then
-          echo "$what: running (systemd user service $I_UNIT, pid $pid). It starts again by itself after a restart."
+          say "$what: running (systemd user service $I_UNIT, pid $pid). It starts again by itself after a restart."
+          instances+=(--instance "$id:$I_NAME:running:systemd:$pid")
         else
-          echo "$what: installed, but its loop isn't running right now; systemd starts it again within 30 s."
+          say "$what: installed, but its loop isn't running right now; systemd starts it again within 30 s."
+          instances+=(--instance "$id:$I_NAME:loop_down:systemd:")
         fi
       elif instance_loaded "$id"; then
         # Not a pipeline: an awk that stops at the pid line (gawk does) can leave launchctl writing into a closed
@@ -834,39 +891,55 @@ cmd_status() {
         pid="$(launchctl print "$domain/$I_AGENT" 2>/dev/null || true)"
         pid="$(awk '$1 == "pid" && $2 == "=" { print $3; exit }' <<<"$pid")"
         if [ -n "$pid" ]; then
-          echo "$what: running (LaunchAgent $I_AGENT, pid $pid). It starts again by itself after a restart."
+          say "$what: running (LaunchAgent $I_AGENT, pid $pid). It starts again by itself after a restart."
+          instances+=(--instance "$id:$I_NAME:running:launchd:$pid")
         else
-          echo "$what: installed, but its loop isn't running right now; launchd starts it again within 30 s."
+          say "$what: installed, but its loop isn't running right now; launchd starts it again within 30 s."
+          instances+=(--instance "$id:$I_NAME:loop_down:launchd:")
         fi
       elif [ "$platform" = mac ] && [ -f "$I_PLIST" ]; then
-        echo "$what: installed but not loaded. Run \`factory ci install\` again."
+        say "$what: installed but not loaded. Run \`factory ci install\` again."
+        instances+=(--instance "$id:$I_NAME:not_loaded:launchd:")
       elif [ "$id" = 1 ] && pid="$(hand_pid)"; then
-        echo "$what: running (started by hand, pid $pid). It stops at a restart; \`factory ci install\` keeps it running."
+        say "$what: running (started by hand, pid $pid). It stops at a restart; \`factory ci install\` keeps it running."
+        instances+=(--instance "$id:$I_NAME:running:hand:$pid")
       elif [ "$id" = 1 ]; then
-        echo "$what: not running on $machine. \`factory ci install\` starts it (another machine may run one)."
+        say "$what: not running on $machine. \`factory ci install\` starts it (another machine may run one)."
+        instances+=(--instance "$id:$I_NAME:not_running::")
       fi
     done
     local want
     want="$(wanted_ids | wc -l | tr -d ' ')"
-    [ -n "$installed" ] && [ "$(installed_ids | wc -l | tr -d ' ')" != "$want" ] &&
-      echo "  ci.runners and ci.light ask for $want instance(s) here; \`factory ci install\` brings it to that."
+    [ -z "$json" ] && [ -n "$installed" ] && [ "$(installed_ids | wc -l | tr -d ' ')" != "$want" ] &&
+      echo "  $CI_RUNNERS heavy runner(s) ($(runners_from))$([ "$CI_LIGHT" = 1 ] && echo " and the light lane") make $want instance(s) here; \`factory ci install\` brings it to that."
     if docker info >/dev/null 2>&1; then
-      echo "Docker: running"
-      image_note
+      docker=1
+      [ -n "$json" ] || { echo "Docker: running"; image_note; }
     else
-      echo "Docker: not running. Jobs for $machine wait in GitHub's queue until it is."
+      docker=0
+      say "Docker: not running. Jobs for $machine wait in GitHub's queue until it is."
     fi
   fi
   # The light lane as GitHub will route it: the label in CI_RUNS_ON_LIGHT, if it is set, whatever ci.light says.
   local light_var light_label=""
   if light_var="$(gh api "repos/$CI_REPO/actions/variables/CI_RUNS_ON_LIGHT" --jq .value 2>/dev/null)"; then
-    light_label="$(python3 -c 'import json,sys
-v = json.loads(sys.argv[1]); v = [v] if isinstance(v, str) else v
-print(next((x for x in v if x != "self-hosted"), ""))' "$light_var" 2>/dev/null || true)"
+    light_label="$(bun --no-env-file --config=/dev/null -e 'let v: unknown = JSON.parse(process.argv.at(-1) ?? "");
+v = typeof v === "string" ? [v] : v;
+if (!Array.isArray(v)) throw new Error("not a list");
+const x: unknown = v.find((x: unknown) => x !== "self-hosted");
+console.log(x === undefined ? "" : String(x));' "$light_var" 2>/dev/null || true)"
   elif [ "$CI_LIGHT" = 1 ]; then
     light_label="$CI_LIGHT_LABEL"
   fi
-  python3 "$kit/ci_status.py" --repo "$CI_REPO" --label "$CI_LABEL" ${local_mode:+--local} \
+  if [ -n "$json" ]; then
+    # ${a[@]+...}: an empty array is "unbound" to bash 3.2 (macOS) under set -u.
+    fh "$kit/ci_status" --repo "$CI_REPO" --label "$CI_LABEL" ${local_mode:+--local} \
+      ${light_label:+--light-label "$light_label"} ${light_var:+--light-variable-set} \
+      --json --mode "$mode" ${local_mode:+--runs-on "$value"} ${docker:+--docker "$docker"} \
+      ${instances[@]+"${instances[@]}"}
+    return
+  fi
+  fh "$kit/ci_status" --repo "$CI_REPO" --label "$CI_LABEL" ${local_mode:+--local} \
     ${light_label:+--light-label "$light_label"} ${light_var:+--light-variable-set}
   if [ -n "$local_mode$installed" ] && [ -f "$CI_STATE/runner.log" ]; then
     echo
@@ -876,7 +949,7 @@ print(next((x for x in v if x != "self-hosted"), ""))' "$light_var" 2>/dev/null 
 }
 
 case "${1:-status}" in
-  status) cmd_status ;;
+  status) shift || true; cmd_status "$@" ;;
   use) shift; cmd_use "$@" ;;
   install) cmd_install ;;
   stale) cmd_stale ;;
@@ -886,7 +959,7 @@ case "${1:-status}" in
   stop) cmd_stop ;;
   logs) shift; cmd_logs "$@" ;;
   names) for v in CI_REPO CI_NAME CI_LABEL CI_AGENT CI_PLIST CI_INSTALLED CI_STATE CI_REPLACES CI_UNIT CI_UNIT_FILE \
-               CI_RUNNERS CI_LIGHT CI_LIGHT_LABEL CI_IMAGE CI_CACHES; do
+               CI_RUNNERS CI_RUNNERS_FROM CI_LIGHT CI_LIGHT_LABEL CI_IMAGE CI_CACHES; do
       echo "$v=${!v}"
     done
     echo "CI_HOST=$host" ;;
