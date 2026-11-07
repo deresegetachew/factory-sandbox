@@ -74,6 +74,7 @@ export const LABELS: Record<string, string> = {
   "tasks.staleHours": "A task is stale after (hours)",
   "manager.claimMinutes": "A dev manager's lease lasts (minutes)",
   agents: "Coding agents",
+  formerNames: "Earlier agent names",
 };
 export const MACHINE_LABELS: Record<string, string> = {
   agents: "Agents on this machine",
@@ -82,6 +83,7 @@ export const MACHINE_LABELS: Record<string, string> = {
   autostartAgents: "Agents started after a reboot",
   autostartReport: "Post the boot report",
   "ci.runners": "CI runners on this machine",
+  maxCodingAgents: "Coding agents at once on this machine",
 };
 
 const SHOUTED = new Set(["ci", "ui", "pr", "prs", "api", "env", "prd", "id"]);
@@ -263,6 +265,7 @@ export const SETTINGS: Record<string, Setting> = table([
   S("tasks.releaseDownMinutes", "int", "issues", "An agent that is plainly down (its loop or the daemon said so) gets its in-progress issues back to ready by the sweep after this long."),
   S("tasks.showWhere", "bool", "issues", "Post the machine, folder, tmux session and Remote Control link on agent issues (anyone who can read the repo sees them).", { default: false }),
   S("machines", "dict", "issues", 'Names for the machines, by machine id (`factory machine id` prints it): {"469ae1ea6a9e": {"name": "dev-pc"}}. The web UI and `factory agents ls --json` show the name; with none, the hostname (another machine\'s only with tasks.showWhere), else the id.', { default: {}, read_by: "factory_agents_ls.ts (`factory agents ls`, the web UI)" }),
+  S("formerNames", "dict", "agents", 'An agent\'s earlier names, by its name now: {"haile": ["tewodros"]}. The web UI\'s Team page adds to it when it renames an agent and shows them; the pull requests, branches, messages and finished tasks of an old name keep that name.', { default: {}, read_by: "the web UI's Team page (factory_ui_settings.ts)" }),
   // #251, #258: the factory adds main's rules to the agents' settings each time it starts one.
   S("permissions.allow", "list", "agents", 'Extra Claude Code allow rules for this project\'s agents, like "Edit(src/**)". A rule applies on an agent\'s next run once the pull request from `factory settings pr` is merged: the factory adds them to the agents\' settings, after the release\'s own.'),
   S("reviews.safety-auditor.paths", "list", "gate", "Regexes of paths that need the safety auditor."),
@@ -272,6 +275,8 @@ export const SETTINGS: Record<string, Setting> = table([
   S("design.references", "str", "design", "The folder of design references. Empty: no design check.", { default: "" }),
   S("notes", "str", "paths", "The folder of project notes for the shared agents and skills."),
   S("usageLog", "str", "paths", "Where `factory usage --record` appends its rows (commit it to keep the history).", { default: "docs/factory-usage.md" }),
+  S("usage.logFolders", "list", "paths", "More Claude Code projects folders `factory usage` reads (for example the agents' user's `/home/factory/.claude/projects`), besides yours and the project folder's owner's.", { default: [] }),
+  S("usage.prices", "dict", "paths", 'Prices `factory usage` adds or corrects, in US dollars per million tokens: {"<model id>": {"input": 4, "output": 20, "cacheRead": 0.2, "cacheWrite": 5}}; cacheWrite defaults to 1.25 x input.', { default: {} }),
   S("release.repo", "str", "paths", "The GitHub repository whose releases `factory update` installs (owner/name). Default: the factory's own, deresegetachew/my-skills."),
   S("styles", "list", "commands", 'Style guides per path: [{"paths": [...], "skills": [...], "check": "..."}].'),
   S("ci.name", "str", "ci", "The self-hosted runner's name (default `<repo>-ci`).", { default: "" }),
@@ -300,6 +305,10 @@ export const SETTINGS: Record<string, Setting> = table([
   S("attention.coding-agent.maxMinutes", "int", "ui", "Needs attention: a coding agent's session shows when it has been working this many minutes without a pause.", { default: 120 }),
   S("attention.dev-manager.maxMinutes", "int", "ui", "Needs attention: a dev manager's session shows when it has been working this many minutes without a pause.", { default: 30 }),
   S("attention.product-owner.maxMinutes", "int", "ui", "Needs attention: a product owner's session shows when it has been working this many minutes without a pause.", { default: 30 }),
+  S("attention.idleWithReadyMinutes", "int", "ui", "Needs attention: a coding agent shows when it has been idle this many minutes while a task it may take is ready (on the board, ready this long too).", { default: 10 }),
+  S("attention.spinFactor", "int", "ui", "Needs attention: a task being built shows as spinning when its tokens or its agent's working time pass this many times the median of the done tasks (needs 5 done tasks).", { default: 3 }),
+  S("attention.spinReviewRounds", "int", "ui", "Needs attention: a task being built shows as spinning when it has had this many review rounds with must-fixes.", { default: 3 }),
+  S("attention.spinFailedCi", "int", "ui", "Needs attention: a task being built shows as spinning when this many of its CI runs failed in a row.", { default: 3 }),
   S("tasks.labels", "dict", "issues", "The GitHub labels that mark a task: ready, inProgress, inReview, blocked and the agentPrefix."),
   S("structure.roots", "list", "commands", "Folders the structure check (the hexagonal skill's check_structure script) looks at, when a style uses it.", { default: [] }),
   S("structure.legacy", "str", "commands", "The list of legacy files the structure check leaves alone (it only shrinks).", { default: "" }),
@@ -320,6 +329,7 @@ export const MACHINE: Record<string, Setting> = table([
   S("autostart", "bool", "machine", "Bring the stack and this machine's agents back after a reboot (`factory autostart`).", { scope: "machine", default: false }),
   S("autostartAgents", "list", "machine", "The agents it starts at boot. Empty: the names this machine runs.", { scope: "machine", default: [] }),
   S("autostartReport", "bool", "machine", "Post the boot report on the first started agent's issue (issues mode).", { scope: "machine", default: true }),
+  S("maxCodingAgents", "int", "machine", "How many coding agents may run on this machine at once: starting one more (Start in the web UI, `factory owner start`, `factory loop -i`, `factory agent`) is refused, and `factory resume` at boot starts at most this many, in the team's order. Empty: no limit.", { scope: "machine", default: null, minimum: 1, maximum: 32, read_by: "factory_window.ts (`factory owner start`, `factory loop`, `factory agent`), `factory resume`, `factory autostart status` and the web UI's Team page" }),
   S("ci.runners", "int", "machine", "Heavy CI runners for this project on this machine (`factory ci runners <n>`); wins over the project's `ci.runners`. Empty: the project's.", { scope: "machine", default: null, minimum: 1, maximum: 16 }),
 ]);
 
@@ -360,6 +370,17 @@ const MORE: Record<string, More> = {
   read_by: "the shared agents and skills", examples: ["factory settings set notes .claude/factory/notes"] },
   usageLog: { long: "`factory usage --record LABEL` appends a row of token numbers per task here. Commit the file " +
     "to keep the history.", read_by: "factory_usage.ts" },
+  "usage.logFolders": { long: "Claude Code keeps each session's log in the home folder of the user that runs it " +
+    "(~/.claude/projects, or $CLAUDE_CONFIG_DIR/projects). `factory usage` and the web UI's Usage and cost page read yours " +
+    "and, when the project folder belongs to another user, that user's; when the agents run as a user whose folder is " +
+    "elsewhere, name it here. `factory usage` says where it looked when it finds no logs (`usage_no_logs`).",
+  read_by: "factory_usage.ts (and the web UI's Usage and cost page through it)",
+  examples: ["factory settings set usage.logFolders '[\"/home/factory/.claude/projects\"]'"] },
+  "usage.prices": { long: "`factory usage` prices each reply at Anthropic's API prices for the models it knows " +
+    "(factory_usage_logs.ts says which, and as of when). A model it doesn't know is counted but not priced; give its " +
+    "prices here, or correct one. A 1-hour cache write is 2 x input; fast mode is priced only where it is known.",
+  read_by: "factory_usage.ts",
+  examples: ["factory settings set usage.prices '{\"claude-sonnet-4-5\": {\"input\": 3, \"output\": 15, \"cacheRead\": 0.3}}'"] },
   "commands.typecheck": { long: "Run by CI and by the Stop check after the agent's turn. Empty: skipped.",
     examples: ["factory settings set commands.typecheck 'pnpm -s typecheck'"] },
   "commands.test": { long: "The full test command, run by CI and by the Stop check when files under `codePaths` " +
@@ -535,6 +556,22 @@ const MORE: Record<string, More> = {
   "attention.prWaitHours": { long: "Counted from when the pull request was opened, as the last snapshot read it. A draft never " +
     "shows. Its action opens the pull request's page.",
   examples: ["factory settings set attention.prWaitHours 12"] },
+  "attention.idleWithReadyMinutes": { long: "Idle is counted from the agent's heartbeat (its since). A task it may take is ready, " +
+    "held by nobody, handed to nobody else and waiting for no open task. A Claude session idle at its prompt never looks " +
+    "for work by itself, and one whose prompt box still holds text is said to have a message typed but not sent. Its action " +
+    "is Start work: after a confirm, `/next-task` goes to the agent's session through `factory say`, as the chat sends it.",
+  examples: ["factory settings set attention.idleWithReadyMinutes 20"] },
+  "attention.spinFactor": { long: "What a task took is worked out from this machine's Claude Code logs, the board's claims and " +
+    "the snapshot (factory_task_cost.ts, `factory usage --by task`): its tokens (fresh input and output, as a budget counts " +
+    "them) and its agent's working minutes (its sessions' spans added up). A task in progress or in review is compared with " +
+    "the median of the done tasks, only once 5 tasks are done; with fewer, nothing is compared. Its action opens the agent's output.",
+  examples: ["factory settings set attention.spinFactor 4"] },
+  "attention.spinReviewRounds": { long: "A review round is a head of the task's pull request the dev manager gave must-fixes, as " +
+    "the snapshots read them. Its action opens the agent's output.",
+  examples: ["factory settings set attention.spinReviewRounds 4"] },
+  "attention.spinFailedCi": { long: "Counted from the task's newest finished CI run back, on its branch, as the snapshots read " +
+    "them; a run that passed ends the count. Its action opens the agent's output.",
+  examples: ["factory settings set attention.spinFailedCi 5"] },
   "attention.dev-manager.maxMinutes": { long: "A dev manager's pass is short, so one that has been working much longer is " +
     "likely stuck. Counted from when its state last changed (its heartbeat's since). The item opens its output, where Stop is.",
   examples: ["factory settings set attention.dev-manager.maxMinutes 45"] },
