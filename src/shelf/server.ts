@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { openDb } from "./db";
 import { apiError } from "./errors";
 import { itemsRoutes } from "./items";
+import { serveStatic } from "./static";
 import { tagStore } from "./tags";
 
 export { apiError };
@@ -17,7 +18,7 @@ export function createApp(dbPath: string): App {
     const { pathname } = new URL(req.url);
     if (req.method === "GET" && pathname === "/api/health") return Response.json({ ok: true });
     if (req.method === "GET" && pathname === "/api/tags") return Response.json(tags.counts());
-    const answer = await items(req, pathname);
+    const answer = (await items(req, pathname)) ?? serveStatic(req.method, pathname);
     if (answer) return answer;
     return apiError(
       404,
