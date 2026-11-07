@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { openDb } from "./db";
 import { apiError } from "./errors";
+import { exportRoute } from "./export";
 import { itemsRoutes } from "./items";
 import { serveStatic } from "./static";
 import { statsQueries } from "./stats";
@@ -16,11 +17,13 @@ export function createApp(dbPath: string): App {
   const tags = tagStore(db);
   const items = itemsRoutes(db, tags);
   const stats = statsQueries(db);
+  const exportItems = exportRoute(db, tags);
   const fetch = async (req: Request): Promise<Response> => {
     const { pathname } = new URL(req.url);
     if (req.method === "GET" && pathname === "/api/health") return Response.json({ ok: true });
     if (req.method === "GET" && pathname === "/api/tags") return Response.json(tags.counts());
     if (req.method === "GET" && pathname === "/api/stats") return Response.json(stats());
+    if (req.method === "GET" && pathname === "/api/export") return exportItems(req);
     const answer = (await items(req, pathname)) ?? serveStatic(req.method, pathname);
     if (answer) return answer;
     return apiError(
