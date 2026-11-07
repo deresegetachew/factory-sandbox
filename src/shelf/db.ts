@@ -21,6 +21,10 @@ CREATE TABLE IF NOT EXISTS tags (
   UNIQUE (item_id, tag)
 );
 CREATE INDEX IF NOT EXISTS tags_by_tag ON tags(tag);
+CREATE TABLE IF NOT EXISTS goals (
+  year  INTEGER PRIMARY KEY CHECK (year BETWEEN 0 AND 9999),
+  books INTEGER NOT NULL CHECK (books BETWEEN 1 AND 1000)
+);
 `;
 
 /** Opens (or creates) the Shelf database at `path` (a file path or ":memory:") and ensures the schema exists. */

@@ -3,6 +3,7 @@ import { openDb } from "./db";
 import { apiError } from "./errors";
 import { exportRoute } from "./export";
 import { allowedHosts, guardApi } from "./guard";
+import { goalStore, goalsRoutes, parseYear } from "./goals";
 import { importRoute } from "./import";
 import { itemsRoutes } from "./items";
 import { serveStatic } from "./static";
@@ -30,16 +31,25 @@ export function createApp(dbPath: string, options: AppOptions = {}): App {
   const stats = statsQueries(db);
   const exportItems = exportRoute(db, tags);
   const importItems = importRoute(db, tags);
+  const goals = goalStore(db);
+  const goalRoutes = goalsRoutes(goals);
+  // GET /api/stats shows the goal for ?year=YYYY, or for the current UTC year when it is not given.
+  const statsAnswer = (req: Request): Response => {
+    const raw = new URL(req.url).searchParams.get("year");
+    const year = raw === null ? new Date().getUTCFullYear() : parseYear(raw);
+    if (year instanceof Response) return year;
+    return Response.json(stats(goals.get(year)));
+  };
   const fetch = async (req: Request): Promise<Response> => {
     const { pathname } = new URL(req.url);
     const refused = guardApi(req, pathname, hosts);
     if (refused) return refused;
     if (req.method === "GET" && pathname === "/api/health") return Response.json({ ok: true });
     if (req.method === "GET" && pathname === "/api/tags") return Response.json(tags.counts());
-    if (req.method === "GET" && pathname === "/api/stats") return Response.json(stats());
+    if (req.method === "GET" && pathname === "/api/stats") return statsAnswer(req);
     if (req.method === "GET" && pathname === "/api/export") return exportItems(req);
     if (req.method === "POST" && pathname === "/api/import") return importItems(req);
-    const answer = (await items(req, pathname)) ?? serveStatic(req.method, pathname);
+    const answer = (await items(req, pathname)) ?? (await goalRoutes(req, pathname)) ?? serveStatic(req.method, pathname);
     if (answer) return answer;
     return apiError(
       404,

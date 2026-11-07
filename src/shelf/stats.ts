@@ -1,10 +1,13 @@
 import type { Database } from "bun:sqlite";
 import { STATUSES } from "./fields";
+import type { Goal } from "./goals";
 
 export type Stats = {
   byMonth: { month: string; done: number }[];
   byTag: { tag: string; total: number; done: number }[];
   totals: Record<(typeof STATUSES)[number], number>;
+  /** The reading goal for the year asked for (the current UTC year by default), or null when none is set. */
+  goal: Goal | null;
 };
 
 /**
@@ -26,7 +29,7 @@ export function statsQueries(db: Database) {
   );
   const totals = db.query<{ status: string; n: number }, []>("SELECT status, COUNT(*) AS n FROM items GROUP BY status");
 
-  return (): Stats => {
+  return (goal: Goal | null): Stats => {
     const counts = Object.fromEntries(STATUSES.map((s) => [s, 0])) as Stats["totals"];
     for (const { status, n } of totals.all()) {
       if (status in counts) counts[status as keyof Stats["totals"]] = n;
@@ -36,6 +39,7 @@ export function statsQueries(db: Database) {
       // Sorted in JS, like the item tags and GET /api/tags, so every tag list uses the same order.
       byTag: byTag.all().sort((a, b) => (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0)),
       totals: counts,
+      goal,
     };
   };
 }
