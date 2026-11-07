@@ -90,6 +90,24 @@
         <div id="message" class="error" role="alert" hidden></div>
         <ul id="items"></ul>
       </section>
+
+      <section id="stats" aria-labelledby="stats-heading">
+        <h2 id="stats-heading">Reading stats</h2>
+        <div id="stats-body"></div>
+      </section>
+
+      <section aria-labelledby="files-heading">
+        <h2 id="files-heading">Import and export</h2>
+        <div class="row">
+          <a class="button secondary" href="/api/export?format=json" download>Export JSON</a>
+          <a class="button secondary" href="/api/export?format=csv" download>Export CSV</a>
+        </div>
+        <form id="import-form">
+          <label>Import a file exported from Shelf <input name="file" type="file" accept=".json,.csv" /></label>
+          <button type="submit">Import</button>
+        </form>
+        <div id="import-result" role="status" aria-live="polite"></div>
+      </section>
     </main>
   </body>
 </html>

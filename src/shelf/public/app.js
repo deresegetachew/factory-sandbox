@@ -1,7 +1,8 @@
 // The Shelf page: loads the list from the REST API, and wires the add form, the search and filters, and each
 // item's controls to it. The search and filters live in the page URL's query string.
+import { importContentType, importFormat, importProblem, importSummary, statsTables } from "./data.js";
 import { FILTER_KEYS, filtersFromSearch, filtersToSearch, hasFilters, itemsPath } from "./filters.js";
-import { parseTags, renderList, renderTagOptions } from "./render.js";
+import { parseTags, renderImportResult, renderList, renderStats, renderTagOptions } from "./render.js";
 
 const list = document.getElementById("items");
 const addForm = document.getElementById("add-form");
@@ -9,6 +10,9 @@ const addError = document.getElementById("add-error");
 const message = document.getElementById("message");
 const filterForm = document.getElementById("filters");
 const tagSelect = filterForm.elements.tag;
+const statsBody = document.getElementById("stats-body");
+const importForm = document.getElementById("import-form");
+const importResult = document.getElementById("import-result");
 
 /** The filters as the form shows them. */
 function readFilters() {
@@ -95,6 +99,53 @@ async function loadTags() {
   tagSelect.value = filters.tag;
 }
 
+/** Refills the stats section from GET /api/stats (it changes with every edit and import). */
+async function loadStats() {
+  const stats = await api("GET", "/api/stats");
+  statsBody.replaceChildren(...renderStats(document, statsTables(stats)));
+}
+
+/** Shows a short message in the import result area (as text). */
+function showImportMessage(text) {
+  const p = document.createElement("p");
+  p.textContent = text;
+  importResult.replaceChildren(p);
+}
+
+importForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const file = importForm.elements.file.files[0];
+  if (!file) return showImportMessage("Choose a .json or .csv file exported from Shelf.");
+  const problem = importProblem(file);
+  if (problem) return showImportMessage(problem);
+
+  const format = importFormat(file.name);
+  const button = importForm.querySelector("button");
+  button.disabled = true;
+  showImportMessage("Importing...");
+  try {
+    // The file goes as it is; fetch streams it, so the page stays responsive while the server works.
+    const res = await fetch(`/api/import?format=${format}`, {
+      method: "POST",
+      headers: { "content-type": importContentType(format) },
+      body: file,
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      const err = data && data.error;
+      showImportMessage(err ? `${err.message} ${err.fix}` : `The server answered ${res.status}. Try a smaller file or reload the page.`);
+      return;
+    }
+    importResult.replaceChildren(renderImportResult(document, importSummary(data)));
+    importForm.reset();
+    await load();
+  } catch {
+    showImportMessage("The import could not be sent. Check that Shelf is still running, then try again.");
+  } finally {
+    button.disabled = false;
+  }
+});
+
 /** The newest load wins: an older answer arriving late (fast typing) must not overwrite a newer list. */
 let loadSeq = 0;
 
@@ -102,7 +153,7 @@ let loadSeq = 0;
 async function load() {
   const seq = ++loadSeq;
   try {
-    const [items] = await Promise.all([api("GET", itemsPath(filters)), loadTags()]);
+    const [items] = await Promise.all([api("GET", itemsPath(filters)), loadTags(), loadStats()]);
     if (seq !== loadSeq) return;
     const emptyText = hasFilters(filters) ? "No items match" : "Nothing on your shelf yet";
     list.replaceChildren(...renderList(document, items, actions, emptyText));

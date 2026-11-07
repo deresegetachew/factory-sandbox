@@ -105,6 +105,51 @@ button.danger {
   background: #fff3f3;
 }
 
+a.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--accent);
+  background: #fff;
+  text-decoration: none;
+}
+
+table.stats {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+  background: #fff;
+}
+
+table.stats caption {
+  text-align: left;
+  font-weight: 600;
+  padding: 0.3rem 0;
+}
+
+table.stats th,
+table.stats td {
+  text-align: left;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.import-result .headline {
+  font-weight: 600;
+}
+
+.import-result li.rejected {
+  color: var(--error);
+}
+
+#import-form {
+  margin-top: 0.75rem;
+}
+
 #filters {
   margin-bottom: 1rem;
 }
