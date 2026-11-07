@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { parseCsvRecords } from "./csv";
+import { csvRecords } from "./csv";
 import { apiError } from "./errors";
 import { TAG_SEPARATOR } from "./export";
 import { type CheckedInput, InputError, type Item, nextFinishedAt, parseIsoDate, validateItemInput } from "./items";
@@ -73,16 +73,36 @@ function rowsFromJson(text: string): FileRow[] {
   });
 }
 
-/** The rows of an export-format CSV file, read by header name; unknown columns are ignored. */
-function rowsFromCsv(text: string): FileRow[] {
-  let records: string[][];
+/**
+ * The header and the data records of a CSV file, with a leading BOM stripped. Only truly empty lines are skipped,
+ * and never kept; a line with an empty or blank cell is a record and gets validated. Reading stops with
+ * too_many_rows as soon as data record maxRows + 1 is read, so the rest of the file is never parsed.
+ */
+export function readCsvLines(text: string, maxRows: number = MAX_IMPORT_ROWS): string[][] {
+  const lines: string[][] = [];
   try {
-    records = parseCsvRecords(text.startsWith("﻿") ? text.slice(1) : text);
+    for (const cells of csvRecords(text.startsWith("﻿") ? text.slice(1) : text)) {
+      if (cells.length === 0) continue;
+      lines.push(cells);
+      // lines holds the header too, so more than maxRows data records means more than maxRows + 1 lines.
+      if (lines.length > maxRows + 1) {
+        throw new FileError(
+          "too_many_rows",
+          `The file has more than ${maxRows} rows; an import takes at most ${maxRows}.`,
+          "Split the file into smaller files and import them one after another.",
+        );
+      }
+    }
   } catch (e) {
+    if (e instanceof FileError) throw e;
     throw new FileError("invalid_csv", (e as Error).message, "Fix the CSV (or export it again from Shelf) and import it again.");
   }
-  // Only truly empty lines are skipped; a line with an empty or blank cell is a row and gets validated.
-  const lines = records.filter((cells) => cells.length > 0);
+  return lines;
+}
+
+/** The rows of an export-format CSV file, read by header name; unknown columns are ignored. */
+function rowsFromCsv(text: string): FileRow[] {
+  const lines = readCsvLines(text);
   const header = lines.shift();
   if (!header) throw new FileError("invalid_csv", "The CSV file is empty.", "Import a CSV with a header row: title,author,url,...");
   if (header.length > MAX_CSV_COLUMNS) {
@@ -92,7 +112,6 @@ function rowsFromCsv(text: string): FileRow[] {
       "Import a file made by Shelf's CSV export, or remove the extra columns.",
     );
   }
-  checkRowCount(lines.length);
 
   // Each column's position, found once from the header.
   const position = new Map<string, number>();
