@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { slugify } from "../src/textkit";
+import { slugify, wordCount } from "../src/textkit";
 
 describe("slugify", () => {
   test("lowercases and turns punctuation and spaces into one dash", () => {
@@ -32,5 +32,31 @@ describe("slugify", () => {
 
   test("leaves an existing slug unchanged", () => {
     expect(slugify("already-a-slug-123")).toBe("already-a-slug-123");
+  });
+});
+
+describe("wordCount", () => {
+  test("returns 0 for an empty string", () => {
+    expect(wordCount("")).toBe(0);
+  });
+
+  test("ignores leading, trailing and repeated spaces", () => {
+    expect(wordCount(" one  two ")).toBe(2);
+  });
+
+  test("returns 0 for a whitespace-only string", () => {
+    expect(wordCount("  \t\n  ")).toBe(0);
+  });
+
+  test("returns 1 for a single word", () => {
+    expect(wordCount("hello")).toBe(1);
+  });
+
+  test("treats tabs and newlines as separators", () => {
+    expect(wordCount("a\tb\nc")).toBe(3);
+  });
+
+  test("does not split words on attached punctuation", () => {
+    expect(wordCount("hello, world")).toBe(2);
   });
 });
