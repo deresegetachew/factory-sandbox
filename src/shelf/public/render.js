@@ -24,6 +24,57 @@ export function parseTags(text) {
     .filter((t) => t !== "");
 }
 
+/**
+ * The item as one line of plain text: "Author, Title (URL)", leaving out a missing author or URL. Fields are trimmed
+ * and a blank one counts as missing; the text is otherwise exactly what the user typed (never escaped or reformatted).
+ */
+export function citation(item) {
+  const clean = (value) => (typeof value === "string" ? value.trim() : "");
+  const title = clean(item.title);
+  const author = clean(item.author);
+  const url = clean(item.url);
+  const named = author ? `${author}, ${title}` : title;
+  return url ? `${named} (${url})` : named;
+}
+
+const COPY_LABEL = "Copy as citation";
+
+/**
+ * The "Copy as citation" button and its fallback field. The clipboard is actions.clipboard when given (null means
+ * none), else navigator.clipboard. On success the button says "Copied" for actions.copiedMs (2 s); when there is no
+ * clipboard or it refuses, the line shows in a read-only field, selected, so the user can copy it by hand.
+ */
+function citationControls(doc, item, actions) {
+  const button = h(doc, "button", { type: "button", class: "secondary", "aria-label": `${COPY_LABEL}: ${item.title}` });
+  button.textContent = COPY_LABEL;
+  const field = h(doc, "input", { type: "text", readonly: "", "data-field": "citation", class: "citation", "aria-label": "Citation" });
+  field.readOnly = true;
+  field.hidden = true;
+  let timer = null;
+
+  button.addEventListener("click", async () => {
+    const line = citation(item);
+    const clipboard = "clipboard" in actions ? actions.clipboard : globalThis.navigator?.clipboard;
+    try {
+      if (typeof clipboard?.writeText !== "function") throw new Error("no clipboard");
+      await clipboard.writeText(line);
+    } catch {
+      field.value = line;
+      field.hidden = false;
+      field.focus?.();
+      field.select?.();
+      return;
+    }
+    field.hidden = true;
+    button.textContent = "Copied";
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      button.textContent = COPY_LABEL;
+    }, actions.copiedMs ?? 2000);
+  });
+  return [button, field];
+}
+
 /** Creates `tag` with string attributes and children (elements or text). */
 function h(doc, tag, attrs = {}, ...children) {
   const el = doc.createElement(tag);
@@ -139,7 +190,7 @@ export function renderItem(doc, item, actions = {}) {
   deleteButton.textContent = "Delete";
   deleteButton.addEventListener("click", () => actions.onDelete?.(item.id, item));
 
-  li.append(h(doc, "div", { class: "buttons" }, editButton, deleteButton), form, error);
+  li.append(h(doc, "div", { class: "buttons" }, editButton, deleteButton, ...citationControls(doc, item, actions)), form, error);
   return li;
 }
 
