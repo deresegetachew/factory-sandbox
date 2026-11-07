@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { parseCsv } from "./csv";
+import { parseCsvRecords } from "./csv";
 import { apiError } from "./errors";
 import { TAG_SEPARATOR } from "./export";
 import { type CheckedInput, InputError, type Item, nextFinishedAt, parseIsoDate, validateItemInput } from "./items";
@@ -10,8 +10,16 @@ type RowNote = { row: number; reason: string };
 
 export type ImportResult = { added: number; skipped: RowNote[]; rejected: RowNote[] };
 
-/** A data row read from the file: its number, the item body to validate, and the dates the file gave. */
-type FileRow = { row: number; body: Record<string, unknown>; created_at?: unknown; updated_at?: unknown };
+/**
+ * A data row read from the file: its number, the item body to validate, and the dates the file gave. `error` is set
+ * when the row cannot be an item at all (so it is rejected with that reason, never dropped).
+ */
+type FileRow = { row: number; body: unknown; created_at?: unknown; updated_at?: unknown; error?: string };
+
+/** Far above any real shelf; a larger file answers 400 instead of tying up the single-process server. */
+export const MAX_IMPORT_ROWS = 100_000;
+/** The export has 10 columns; a much wider header is not a Shelf file and would make every row slow to read. */
+export const MAX_CSV_COLUMNS = 200;
 
 /** A whole-file problem: the import answers 400 and adds nothing. */
 class FileError extends Error {
@@ -21,6 +29,16 @@ class FileError extends Error {
     readonly fix: string,
   ) {
     super(message);
+  }
+}
+
+function checkRowCount(count: number): void {
+  if (count > MAX_IMPORT_ROWS) {
+    throw new FileError(
+      "too_many_rows",
+      `The file has ${count} rows; an import takes at most ${MAX_IMPORT_ROWS}.`,
+      "Split the file into smaller files and import them one after another.",
+    );
   }
 }
 
@@ -45,46 +63,61 @@ function rowsFromJson(text: string): FileRow[] {
   if (version !== undefined && version !== 1) {
     throw new FileError("unsupported_version", `The file's version ${JSON.stringify(version)} is not supported.`, "Import a file made by this version of Shelf (version 1).");
   }
-  return items.map((item, i) => {
-    const body = typeof item === "object" && item !== null && !Array.isArray(item) ? (item as Record<string, unknown>) : ({ __notObject: item } as Record<string, unknown>);
+  checkRowCount(items.length);
+  return items.map((item, i): FileRow => {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) {
+      return { row: i + 1, body: item, error: "The item is not an object." };
+    }
+    const body = item as Record<string, unknown>;
     return { row: i + 1, body, created_at: body.created_at, updated_at: body.updated_at };
   });
 }
 
 /** The rows of an export-format CSV file, read by header name; unknown columns are ignored. */
 function rowsFromCsv(text: string): FileRow[] {
-  let table: string[][];
+  let records: string[][];
   try {
-    table = parseCsv(text.startsWith("﻿") ? text.slice(1) : text);
+    records = parseCsvRecords(text.startsWith("﻿") ? text.slice(1) : text);
   } catch (e) {
     throw new FileError("invalid_csv", (e as Error).message, "Fix the CSV (or export it again from Shelf) and import it again.");
   }
-  const isBlank = (cells: string[]) => cells.length === 1 && cells[0]!.trim() === "";
-  const lines = table.filter((cells) => !isBlank(cells));
+  // Only truly empty lines are skipped; a line with an empty or blank cell is a row and gets validated.
+  const lines = records.filter((cells) => cells.length > 0);
   const header = lines.shift();
   if (!header) throw new FileError("invalid_csv", "The CSV file is empty.", "Import a CSV with a header row: title,author,url,...");
-  const columns = header.map((h) => h.trim().toLowerCase());
-  if (!columns.includes("title")) {
+  if (header.length > MAX_CSV_COLUMNS) {
+    throw new FileError(
+      "invalid_csv",
+      `The CSV header has ${header.length} columns; Shelf reads at most ${MAX_CSV_COLUMNS}.`,
+      "Import a file made by Shelf's CSV export, or remove the extra columns.",
+    );
+  }
+  checkRowCount(lines.length);
+
+  // Each column's position, found once from the header.
+  const position = new Map<string, number>();
+  header.forEach((name, at) => {
+    const key = name.trim().toLowerCase();
+    if (!position.has(key)) position.set(key, at);
+  });
+  if (!position.has("title")) {
     throw new FileError("missing_column", 'The CSV has no "title" column.', "Add a title column to the header row, or export the file again from Shelf.");
   }
 
   return lines.map((cells, i): FileRow => {
     const row = i + 1;
-    if (cells.length > columns.length) {
-      return { row, body: { __tooManyCells: cells.length } };
+    if (cells.length > header.length) {
+      return { row, body: null, error: "The row has more cells than the header. Check for an unquoted comma in a cell." };
     }
     const cell = (name: string): string | undefined => {
-      const at = columns.indexOf(name);
-      return at === -1 ? undefined : (cells[at] ?? "");
+      const at = position.get(name);
+      return at === undefined ? undefined : (cells[at] ?? "");
     };
     const body: Record<string, unknown> = { title: cell("title") ?? "" };
-    const nullable = (name: string) => {
+    for (const name of ["author", "url", "finished_at"]) {
       const v = cell(name);
       if (v !== undefined) body[name] = v === "" ? null : v;
-    };
-    nullable("author");
-    nullable("url");
-    nullable("finished_at");
+    }
     for (const name of ["kind", "status"]) {
       const v = cell(name);
       if (v !== undefined && v !== "") body[name] = v;
@@ -127,13 +160,9 @@ export function importRoute(db: Database, tags: ReturnType<typeof tagStore>) {
     const seen = new Map<string, number | "shelf">();
     for (const item of existing.all()) seen.set(duplicateKey(item), "shelf");
 
-    for (const { row, body, created_at, updated_at } of rows) {
-      if ("__tooManyCells" in body) {
-        result.rejected.push({ row, reason: "The row has more cells than the header. Check for an unquoted comma in a cell." });
-        continue;
-      }
-      if ("__notObject" in body) {
-        result.rejected.push({ row, reason: "The item is not an object." });
+    for (const { row, body, created_at, updated_at, error } of rows) {
+      if (error !== undefined) {
+        result.rejected.push({ row, reason: error });
         continue;
       }
       let input: CheckedInput;

@@ -13,6 +13,9 @@ export { apiError };
 
 export type App = { fetch(req: Request): Response | Promise<Response>; db: Database };
 
+/** The largest request body the server accepts (an import file is the only large one). */
+export const MAX_BODY_BYTES = 20 * 1024 * 1024;
+
 export type AppOptions = {
   /** The Host values ("host:port") the API answers to; see guard.ts. Defaults to 127.0.0.1 and localhost on port 3000. */
   hosts?: string[];
@@ -63,7 +66,8 @@ if (import.meta.main) {
   const { hostname, port, dbPath } = serverOptions(process.env);
   // The app needs the port actually bound (PORT=0 picks one), so it is built once the server is listening.
   let app: App | undefined;
-  const server = Bun.serve({ hostname, port, fetch: (req) => app!.fetch(req) });
+  // 20 MB is far above any real shelf export; Bun's 128 MB default would let one import use gigabytes.
+  const server = Bun.serve({ hostname, port, maxRequestBodySize: MAX_BODY_BYTES, fetch: (req) => app!.fetch(req) });
   app = createApp(dbPath, { hosts: allowedHosts(server.port!, hostname) });
   console.log(`Shelf on http://${server.hostname}:${server.port} (database: ${dbPath})`);
 }
