@@ -143,7 +143,7 @@
     ".claude/hooks/factory_heartbeat.ts": "51b27926c3caa256dc309d8114fa4d6b93dfd45c7a0400330909a1b9f512033d",
     ".claude/hooks/factory_heartbeat_service.ts": "b8bdec6acf40d6f2b4704d3581b792f7033ef28824c57812c0c3ef3c27b8f89f",
     ".claude/hooks/factory_init.ts": "4a7a200cd9b5b56e7d6fae30f675920a7fb45126cf949bcef624de5e45f11e62",
-    ".claude/hooks/factory_issues.ts": "4ff36804de2a68e6359e02645f081fce1f98aa1952796ba0c61812474c5c16de",
+    ".claude/hooks/factory_issues.ts": "03f000904af015b7f0da7174e6de676ebb581a960ddddabe955fa70576c2cf25",
     ".claude/hooks/factory_lease.ts": "dc9cb6206f4d2baac29f4e1b6b166c2ad51e317387fa5350432e3230115425b4",
     ".claude/hooks/factory_leases.ts": "720351a95177ef05af4e45f625576729b98092edee833964296e3551728505c2",
     ".claude/hooks/factory_lessons.ts": "fba85888ccca4337fde31fd0133c41b4da429dafad04ded01cf733cd76fd9b51",
@@ -164,7 +164,7 @@
     ".claude/hooks/factory_prd.ts": "0dec5c4a0492bbb62e34ae78a93114fe53fdbfa4a232dab59ab8d284ad6429c5",
     ".claude/hooks/factory_prs.ts": "8f9171c1843a93202d8c563f020fe919630df82f3f0071d7bbac6fb2c33de3d2",
     ".claude/hooks/factory_release.ts": "c26a7cf54fe4bcf55f1c6561d6ccbf14d9f1e7087bfe23f0ef1cf0050363038a",
-    ".claude/hooks/factory_release_files.json": "46d640154cfd07b97e8e03f5c2fb4b7e1f025704e4954336b30187ac82d7ca3c",
+    ".claude/hooks/factory_release_files.json": "b37e719c7849bd84c0acc462e31a0614651bd3754456b4e825b88e97c3f42eb3",
     ".claude/hooks/factory_remote.ts": "52993de86a1f47eaa1a20da85ec2e34daf3023c333d62e62d827fb61ef30e75e",
     ".claude/hooks/factory_remotes.ts": "32374d6f3442a3d4a0605b19fd168e5271fc6a39adff759352e8138dcd5f1d56",
     ".claude/hooks/factory_report.ts": "3f4b7e15553a6bda4480c1fbc1fa032bbb2caf1679147badf8bba257adba6702",
@@ -255,12 +255,16 @@
     "factory": "c7b2fe249e067550ebd82ac0c3cb7f0fc5d5fad7421bf3932799fabd16cfabcf",
     "factory-loop.sh": "349f86d0e188c043543112a9f00c6e18a2d3b7c0aaecf8d651ec27f1bb345f00"
   },
-  "previous": null,
+  "previous": {
+    "sha256": "aa9d4cb3ebb8e98099a171ab87c4f624d4518cdd318528607085ba7a7b87d827",
+    "tag": "v0.2.6",
+    "version": "0.2.6"
+  },
   "repo": "deresegetachew/my-skills",
   "schema": "factory-pin/1",
-  "sha256": "aa9d4cb3ebb8e98099a171ab87c4f624d4518cdd318528607085ba7a7b87d827",
-  "source_commit": "d2938aaf51378c3daea7bb581d14200912bc4d84",
-  "tag": "v0.2.6",
+  "sha256": "46cd36d1d137d5de5ed2c3dd862c746fb1770cb5bc2dc8fe3e4f5e27f66bf477",
+  "source_commit": "8267b1cbeee6b0f5d09828b3042a59a77ec88db9",
+  "tag": "v0.2.6-fresh.3",
   "templates": [
     ".claude/factory.json",
     ".claude/factory/lessons.md",
@@ -275,5 +279,5 @@
     "docs/build-plan.md",
     "docs/decisions/0000-template.md"
   ],
-  "version": "0.2.6"
+  "version": "0.2.6-fresh.3"
 }
