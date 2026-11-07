@@ -29,7 +29,15 @@ export function parseCsv(text: string): string[][] {
  * or quoted-empty field ("" or a space), which is [""] or [" "]. The import skips only the empty lines.
  */
 export function parseCsvRecords(text: string): string[][] {
-  const rows: string[][] = [];
+  return [...csvRecords(text)];
+}
+
+/**
+ * The records of parseCsvRecords, one at a time: each is parsed only when the caller asks for it, so a caller can
+ * drop the empty lines ([]) as they come and stop early without reading (or holding) the rest of the text. A
+ * parse error is thrown when iteration reaches it.
+ */
+export function* csvRecords(text: string): Generator<string[]> {
   let row: string[] = [];
   let field = "";
   let line = 1;
@@ -41,16 +49,17 @@ export function parseCsvRecords(text: string): string[][] {
     row.push(field);
     field = "";
   };
-  const endRow = () => {
+  /** The finished record ([] for a truly empty line), with the state reset for the next one. */
+  const endRow = (): string[] => {
+    let done: string[] = [];
     if (rowStarted) {
       endField();
-      rows.push(row);
-    } else {
-      rows.push([]);
+      done = row;
     }
     row = [];
     field = "";
     rowStarted = false;
+    return done;
   };
 
   while (i < n) {
@@ -90,21 +99,20 @@ export function parseCsvRecords(text: string): string[][] {
       continue;
     }
     if (c === "\r" && text[i + 1] === "\n") {
-      endRow();
       line++;
       i += 2;
+      yield endRow();
       continue;
     }
     if (c === "\n") {
-      endRow();
       line++;
       i++;
+      yield endRow();
       continue;
     }
     field += c;
     i++;
   }
   // A final row without a line break; a trailing line break adds no empty row.
-  if (rowStarted) endRow();
-  return rows;
+  if (rowStarted) yield endRow();
 }
