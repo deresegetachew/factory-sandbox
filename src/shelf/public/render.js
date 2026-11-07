@@ -187,12 +187,26 @@ function editForm(doc, item, actions, showError) {
   return form;
 }
 
-/** One <li> per item in order, or a single "Nothing on your shelf yet" line for an empty shelf. */
-export function renderList(doc, items, actions = {}) {
+/**
+ * One <li> per item in order, or a single line of `emptyText` when there are none ("Nothing on your shelf yet" for
+ * an empty shelf; the page passes "No items match" when a search or filter is set).
+ */
+export function renderList(doc, items, actions = {}, emptyText = "Nothing on your shelf yet") {
   if (!items.length) {
     const empty = h(doc, "li", { class: "empty" });
-    empty.textContent = "Nothing on your shelf yet";
+    empty.textContent = emptyText;
     return [empty];
   }
   return items.map((item) => renderItem(doc, item, actions));
+}
+
+/**
+ * The tag filter's options: "All tags", then each tag with its count from GET /api/tags. A selected tag no item has
+ * any more (an old bookmark) is added at the end with (0), so the filter still shows what is applied.
+ */
+export function renderTagOptions(doc, tags, selected = "") {
+  const options = [option(doc, "", "All tags", selected === "")];
+  for (const { tag, count } of tags) options.push(option(doc, tag, `${tag} (${count})`, tag === selected));
+  if (selected !== "" && !tags.some((t) => t.tag === selected)) options.push(option(doc, selected, `${selected} (0)`, true));
+  return options;
 }

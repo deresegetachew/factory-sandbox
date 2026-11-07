@@ -1,10 +1,36 @@
-// The Shelf page: loads the list from the REST API, and wires the add form and each item's controls to it.
-import { parseTags, renderList } from "./render.js";
+// The Shelf page: loads the list from the REST API, and wires the add form, the search and filters, and each
+// item's controls to it. The search and filters live in the page URL's query string.
+import { FILTER_KEYS, filtersFromSearch, filtersToSearch, hasFilters, itemsPath } from "./filters.js";
+import { parseTags, renderList, renderTagOptions } from "./render.js";
 
 const list = document.getElementById("items");
 const addForm = document.getElementById("add-form");
 const addError = document.getElementById("add-error");
 const message = document.getElementById("message");
+const filterForm = document.getElementById("filters");
+const tagSelect = filterForm.elements.tag;
+
+/** The filters as the form shows them. */
+function readFilters() {
+  return Object.fromEntries(FILTER_KEYS.map((key) => [key, filterForm.elements[key].value]));
+}
+
+/** Puts `filters` into the form (the tag select is filled by loadTags, which keeps the selection). */
+function fillFilters(filters) {
+  for (const key of FILTER_KEYS) {
+    if (key !== "tag") filterForm.elements[key].value = filters[key];
+  }
+}
+
+/** The filters the page started with, from its URL; kept current as they change. */
+let filters = filtersFromSearch(location.search);
+
+/** Keeps the URL in step with the filters (no new history entry per keystroke), then reloads the list. */
+function applyFilters(next) {
+  filters = next;
+  history.replaceState(null, "", location.pathname + filtersToSearch(filters));
+  load();
+}
 
 /** Calls the API; resolves to the JSON answer (or null for 204), or rejects with "message Fix: fix" text. */
 async function api(method, path, body) {
@@ -62,16 +88,49 @@ async function change(id, fields) {
   return null;
 }
 
-/** Reloads the list; a successful load also clears the error shown above it. */
+/** Refills the tag filter from GET /api/tags (counts change after every edit), keeping the selected tag. */
+async function loadTags() {
+  const tags = await api("GET", "/api/tags");
+  tagSelect.replaceChildren(...renderTagOptions(document, tags, filters.tag));
+  tagSelect.value = filters.tag;
+}
+
+/** The newest load wins: an older answer arriving late (fast typing) must not overwrite a newer list. */
+let loadSeq = 0;
+
+/** Reloads the tag filter and the list for the current filters; a successful load clears the error above it. */
 async function load() {
+  const seq = ++loadSeq;
   try {
-    const items = await api("GET", "/api/items");
-    list.replaceChildren(...renderList(document, items, actions));
+    const [items] = await Promise.all([api("GET", itemsPath(filters)), loadTags()]);
+    if (seq !== loadSeq) return;
+    const emptyText = hasFilters(filters) ? "No items match" : "Nothing on your shelf yet";
+    list.replaceChildren(...renderList(document, items, actions, emptyText));
     show(message, "");
   } catch (e) {
-    show(message, e.message);
+    if (seq === loadSeq) show(message, e.message);
   }
 }
+
+let typing;
+filterForm.addEventListener("input", (event) => {
+  // Selects apply at once; the search box waits for a short pause in typing.
+  clearTimeout(typing);
+  if (event.target.name === "q") typing = setTimeout(() => applyFilters(readFilters()), 250);
+  else applyFilters(readFilters());
+});
+filterForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  clearTimeout(typing);
+  applyFilters(readFilters());
+});
+document.getElementById("clear-filters").addEventListener("click", () => {
+  clearTimeout(typing);
+  filterForm.reset();
+  applyFilters(filtersFromSearch(""));
+});
+
+fillFilters(filters);
 
 addForm.addEventListener("submit", async (event) => {
   event.preventDefault();

@@ -51,6 +51,42 @@
 
       <section aria-labelledby="list-heading">
         <h2 id="list-heading">Your shelf</h2>
+        <form id="filters" role="search" autocomplete="off">
+          <label>Search <input name="q" type="search" placeholder="Title, author, notes or tag" /></label>
+          <div class="row">
+            <label>Status
+              <select name="status">
+                <option value="">Any</option>
+                <option value="to_read">To read</option>
+                <option value="reading">Reading</option>
+                <option value="done">Done</option>
+              </select>
+            </label>
+            <label>Kind
+              <select name="kind">
+                <option value="">Any</option>
+                <option value="book">Book</option>
+                <option value="article">Article</option>
+              </select>
+            </label>
+            <label>Tag
+              <select name="tag">
+                <option value="">All tags</option>
+              </select>
+            </label>
+            <label>Min rating
+              <select name="min_rating">
+                <option value="">Any</option>
+                <option value="1">1+</option>
+                <option value="2">2+</option>
+                <option value="3">3+</option>
+                <option value="4">4+</option>
+                <option value="5">5</option>
+              </select>
+            </label>
+          </div>
+          <button type="button" id="clear-filters" class="secondary">Clear filters</button>
+        </form>
         <div id="message" class="error" role="alert" hidden></div>
         <ul id="items"></ul>
       </section>
