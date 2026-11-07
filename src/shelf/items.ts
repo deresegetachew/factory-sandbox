@@ -1,9 +1,11 @@
 import type { Database } from "bun:sqlite";
 import { apiError } from "./errors";
+import { matchesQuery, parseItemQuery } from "./search";
 import { normalizeTags, type tagStore } from "./tags";
 
-export const KINDS = ["book", "article"] as const;
-export const STATUSES = ["to_read", "reading", "done"] as const;
+import { KINDS, STATUSES } from "./fields";
+
+export { KINDS, STATUSES };
 
 export type Item = {
   id: number;
@@ -222,15 +224,18 @@ export function itemsRoutes(db: Database, tags: ReturnType<typeof tagStore>) {
     return Response.json(withTags(patch(id, before, input, new Date().toISOString())));
   };
 
-  const list = (): Response => {
+  const list = (req: Request): Response => {
+    const query = parseItemQuery(new URL(req.url).searchParams);
+    if ("code" in query) return apiError(400, query.code, query.message, query.fix);
     const byItem = tags.byItem();
-    return Response.json(listItems.all().map((item) => ({ ...item, tags: byItem.get(item.id) ?? [] })));
+    const items = listItems.all().map((item) => ({ ...item, tags: byItem.get(item.id) ?? [] }));
+    return Response.json(items.filter((item) => matchesQuery(item, query)));
   };
 
   return async (req: Request, pathname: string): Promise<Response | null> => {
     try {
       if (pathname === "/api/items") {
-        if (req.method === "GET") return list();
+        if (req.method === "GET") return list(req);
         if (req.method === "POST") return await create(req);
         return null;
       }
