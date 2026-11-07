@@ -1,19 +1,21 @@
 import type { Database } from "bun:sqlite";
 import { openDb } from "./db";
+import { apiError } from "./errors";
+import { itemsRoutes } from "./items";
+
+export { apiError };
 
 export type App = { fetch(req: Request): Response | Promise<Response>; db: Database };
-
-/** The API's error shape: `{ error: { code, message, fix } }` with a 4xx status. */
-export function apiError(status: number, code: string, message: string, fix: string): Response {
-  return Response.json({ error: { code, message, fix } }, { status });
-}
 
 /** Builds the Shelf app on the database at `dbPath` (":memory:" for tests), without opening a port. */
 export function createApp(dbPath: string): App {
   const db = openDb(dbPath);
-  const fetch = (req: Request): Response => {
+  const items = itemsRoutes(db);
+  const fetch = async (req: Request): Promise<Response> => {
     const { pathname } = new URL(req.url);
     if (req.method === "GET" && pathname === "/api/health") return Response.json({ ok: true });
+    const answer = await items(req, pathname);
+    if (answer) return answer;
     return apiError(
       404,
       "not_found",
