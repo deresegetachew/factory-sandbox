@@ -29,6 +29,13 @@ they read each month and by tag. Version 1 is for a single user and has no login
 - US-12: I can do all of the above in a simple web UI served by the app.
 - US-13: I can do all of the above through a REST API that speaks JSON.
 
+### Version 1.1
+
+- US-14: I can set a reading goal for a year (a number of books) and see my progress toward it on the stats view and
+  in `GET /api/stats`.
+- US-15: I can export my shelf as a Markdown file, grouped by status, with ratings shown as stars.
+- US-16: I see the items I am currently reading in a strip at the top of the page, and can mark one finished with one click.
+
 ## How it is built
 
 - **Bun only.** The server is `Bun.serve`, storage is `bun:sqlite`, tests are `bun test`. No npm runtime packages;
@@ -48,6 +55,17 @@ they read each month and by tag. Version 1 is for a single user and has no login
 - **API routes** (all under `/api`): `GET /health`; `GET/POST /items`; `GET/PATCH/DELETE /items/:id`; `GET /tags`;
   `GET /stats`; `GET /export?format=json|csv`; `POST /import?format=json|csv`. Search and filters are query parameters
   on `GET /items`: `q`, `status`, `tag`, `kind`, `min_rating`.
+- **Reading goal (v1.1).** One goal per year: a whole number of books from 1 to 1000. `PUT /api/goals/:year` with
+  `{ "books": n }` sets it, `DELETE /api/goals/:year` removes it. `GET /api/stats` gains `goal` for the current UTC
+  year (or `?year=YYYY`): `{ "year", "books", "done" }`, or `null` when no goal is set. `done` counts items with status
+  `done` and kind `book` (see Q4) whose `finished_at` falls in that UTC year (the same date the monthly stats use).
+- **Markdown export (v1.1).** `GET /api/export?format=md` downloads `shelf-YYYY-MM-DD.md`: a heading per status in the
+  order Reading, To read, Done (an empty group is left out), one list line per item with title, author, a link when it
+  has a URL, the rating as stars (`★★★★☆` for 4, nothing when unrated) and its tags. Notes are left out. Text the user
+  typed is escaped so it cannot break the Markdown. Markdown is export only; it cannot be imported.
+- **Currently reading strip (v1.1).** The top of the page lists the items with status `reading`, each with a
+  "Finished" button that sets the status to `done` (so `finished_at` is now). The strip is hidden when nothing is being
+  read; the list and the stats update after a click.
 - **CSV format.** A header row: `title,author,url,kind,status,rating,notes,tags,created_at,finished_at`. Tags are joined
   with `;` in one cell. Quoting follows RFC 4180 (commas, quotes and line breaks inside a cell). UTF-8.
 
@@ -67,12 +85,19 @@ they read each month and by tag. Version 1 is for a single user and has no login
 - A mobile app; the web UI only needs to be usable on a phone-sized screen.
 - Changes to the textkit module.
 
+## Decisions
+
+The owner decided these on 2026-11-07.
+
+- Duplicates on import: a row whose URL (or, without a URL, title plus author) matches an existing item, or an earlier
+  row in the same file, is skipped and reported as a duplicate.
+- The month in the stats is the month the item was marked done (`finished_at`), and `finished_at` can be set by hand
+  through edit and import, for books finished before Shelf.
+- The book/article `kind` field stays.
+
 ## Open questions for the owner
 
 Each has a default the builders use until the owner says otherwise.
 
-- Q1: Duplicates on import. Default: a row whose URL (or, without a URL, title plus author) matches an existing item is
-  skipped and reported as a duplicate.
-- Q2: The month in the stats is the month the item was marked done (`finished_at`). Default: `finished_at` can also be set
-  by hand through edit and import, for books finished before Shelf.
-- Q3: The book/article `kind` field was added to tell the two apart. Default: keep it.
+- Q4: Does the yearly goal count only items whose kind is `book`, or everything finished (books and articles)?
+  Default: only books, since the goal is "a number of books".
