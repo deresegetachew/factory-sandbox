@@ -200,6 +200,13 @@ table.stats td {
   align-items: end;
 }
 
+/* The citation fallback field: wide enough to read the line, never wider than the row. */
+.item .citation {
+  flex: 1 1 16rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .empty {
   color: var(--muted);
   font-style: italic;
