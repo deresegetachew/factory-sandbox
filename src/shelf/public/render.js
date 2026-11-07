@@ -210,3 +210,54 @@ export function renderTagOptions(doc, tags, selected = "") {
   if (selected !== "" && !tags.some((t) => t.tag === selected)) options.push(option(doc, selected, `${selected} (0)`, true));
   return options;
 }
+
+/** A small table: a caption, a header row and body rows, every cell set as text. */
+function table(doc, kind, caption, head, rows) {
+  const captionEl = h(doc, "caption");
+  captionEl.textContent = caption;
+  const headRow = h(doc, "tr", {}, ...head.map((text) => {
+    const th = h(doc, "th", { scope: "col" });
+    th.textContent = text;
+    return th;
+  }));
+  const body = h(doc, "tbody", {}, ...rows.map((cells) => h(doc, "tr", {}, ...cells.map((text) => {
+    const td = h(doc, "td");
+    td.textContent = text;
+    return td;
+  }))));
+  return h(doc, "table", { class: "stats", "data-stats": kind }, captionEl, h(doc, "thead", {}, headRow), body);
+}
+
+/**
+ * The stats section from statsTables(): totals by status, items finished per month (newest first) and per tag.
+ * An empty history says "Nothing finished yet" instead of an empty month table.
+ */
+export function renderStats(doc, tables) {
+  const out = [table(doc, "totals", "By status", ["Status", "Items"], tables.totals)];
+  if (tables.nothingFinished) {
+    const empty = h(doc, "p", { class: "empty" });
+    empty.textContent = "Nothing finished yet";
+    out.push(empty);
+  } else {
+    out.push(table(doc, "months", "Finished per month", ["Month", "Done"], tables.months));
+  }
+  if (tables.tags.length) out.push(table(doc, "tags", "By tag", ["Tag", "Items", "Done"], tables.tags));
+  return out;
+}
+
+/** The import answer: the headline, then one line per skipped or rejected row with its number and reason. */
+export function renderImportResult(doc, summary) {
+  const headline = h(doc, "p", { class: "headline" });
+  headline.textContent = summary.headline;
+  const box = h(doc, "div", { class: "import-result" }, headline);
+  if (summary.rows.length) {
+    box.append(
+      h(doc, "ul", {}, ...summary.rows.map(({ kind, row, reason }) => {
+        const li = h(doc, "li", { class: kind });
+        li.textContent = `Row ${row} ${kind}: ${reason}`;
+        return li;
+      })),
+    );
+  }
+  return box;
+}
