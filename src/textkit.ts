@@ -9,3 +9,11 @@ export function slugify(text: string): string {
     .replace(/[^\p{L}\p{N}]+/gu, "-")
     .replace(/^-+|-+$/g, "");
 }
+
+/**
+ * Counts the words in text: the runs of non-whitespace characters, so
+ * leading, trailing and repeated whitespace never adds a word.
+ */
+export function wordCount(text: string): number {
+  return text.split(/\s+/).filter((word) => word.length > 0).length;
+}
