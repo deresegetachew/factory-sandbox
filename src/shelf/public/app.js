@@ -1,8 +1,8 @@
 // The Shelf page: loads the list from the REST API, and wires the add form, the search and filters, and each
 // item's controls to it. The search and filters live in the page URL's query string.
-import { importContentType, importFormat, importProblem, importSummary, statsTables } from "./data.js";
+import { goalView, importContentType, importFormat, importProblem, importSummary, statsTables } from "./data.js";
 import { FILTER_KEYS, filtersFromSearch, filtersToSearch, hasFilters, itemsPath } from "./filters.js";
-import { parseTags, renderImportResult, renderList, renderReadingStrip, renderStats, renderTagOptions } from "./render.js";
+import { parseTags, renderGoal, renderImportResult, renderList, renderReadingStrip, renderStats, renderTagOptions } from "./render.js";
 
 const list = document.getElementById("items");
 const addForm = document.getElementById("add-form");
@@ -11,6 +11,8 @@ const message = document.getElementById("message");
 const filterForm = document.getElementById("filters");
 const tagSelect = filterForm.elements.tag;
 const statsBody = document.getElementById("stats-body");
+const statsMessage = document.getElementById("stats-message");
+const goalBox = document.getElementById("goal");
 const importForm = document.getElementById("import-form");
 const importResult = document.getElementById("import-result");
 const readingSection = document.getElementById("reading");
@@ -102,10 +104,47 @@ async function loadTags() {
   tagSelect.value = filters.tag;
 }
 
-/** Refills the stats section from GET /api/stats (it changes with every edit and import). */
-async function loadStats() {
-  const stats = await api("GET", "/api/stats");
-  statsBody.replaceChildren(...renderStats(document, statsTables(stats)));
+/**
+ * The year the goal is for. The server counts a book toward the year of its finished_at in UTC, so the page uses the
+ * UTC year too: the goal shown, the one saved and the count always agree.
+ */
+const goalYear = () => new Date().getUTCFullYear();
+
+/** Saves or removes this year's goal; resolves to the error text for the goal to show, or null when it worked. */
+async function changeGoal(method, body) {
+  try {
+    await api(method, `/api/goals/${goalYear()}`, body);
+  } catch (e) {
+    return e.message;
+  }
+  await loadStats(() => true);
+  return null;
+}
+
+const goalActions = {
+  onSave: (books) => changeGoal("PUT", { books }),
+  onRemove: () => changeGoal("DELETE"),
+};
+
+/**
+ * Refills the stats section and the goal from GET /api/stats (they change with every edit and import). Its own failure
+ * shows in the section, so the list and the rest of the page still load. `isCurrent()` is false when a newer load
+ * started, so a late answer does not overwrite newer stats.
+ */
+async function loadStats(isCurrent) {
+  const year = goalYear();
+  try {
+    const stats = await api("GET", `/api/stats?year=${year}`);
+    if (!isCurrent()) return;
+    goalBox.replaceChildren(renderGoal(document, goalView(stats.goal, year), goalActions));
+    statsBody.replaceChildren(...renderStats(document, statsTables(stats)));
+    show(statsMessage, "");
+  } catch (e) {
+    if (!isCurrent()) return;
+    goalBox.replaceChildren();
+    statsBody.replaceChildren();
+    show(statsMessage, `The reading stats could not be loaded. ${e.message}`);
+  }
 }
 
 /** Finished in the reading strip: marks the item done (the server sets finished_at), then reloads the page's data. */
@@ -181,7 +220,7 @@ async function load() {
     const [items] = await Promise.all([
       api("GET", itemsPath(filters)),
       loadTags(),
-      loadStats(),
+      loadStats(() => seq === loadSeq),
       loadReading(() => seq === loadSeq),
     ]);
     if (seq !== loadSeq) return;
